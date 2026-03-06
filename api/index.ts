@@ -398,8 +398,7 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     });
     const type = infoTable["jenis komik"] || "Manga";
     const author = infoTable["pengarang"] || "";
-    const rawStatus = (infoTable["status"] || "").toLowerCase();
-    const status = rawStatus === "end" || rawStatus === "tamat" ? "Completed" : rawStatus === "ongoing" ? "Ongoing" : rawStatus === "hiatus" ? "Hiatus" : rawStatus || "Unknown";
+    const status = infoTable["status"] || "Unknown";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const genres: any[] = [];
     $("a[href*='/genre/']").each((_, el) => {
@@ -621,33 +620,46 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     // Rating from schema
     const rating = $("div[itemprop='ratingValue']").attr("content") ||
       $(".numscore").first().text().trim();
-    // Chapters: fetch from admin-ajax
+    // Fetch chapters and status in parallel
     const mangaIdMatch = $.html().match(/manga_id=(\d+)/);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let chapters: any[] = [];
-    if (mangaIdMatch) {
-      try {
-        const ch$ = await fetchHTML(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaIdMatch[1]}&page=1&action=chapter_list`);
-        ch$("div[data-chapter-number]").each((_, el) => {
-          const $ch = ch$(el);
-          const chNum = $ch.attr("data-chapter-number") || "";
-          const chLink = $ch.find("a").first();
-          const chHref = chLink.attr("href") || "";
-          const chTitle = $ch.find("span").first().text().trim() || `Chapter ${chNum}`;
-          const chDate = $ch.find("time").attr("datetime") || "";
-          if (!chHref) return;
-          const path = chHref.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
-          const parts = path.split("/");
-          if (parts.length < 2) return;
-          const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
-          chapters.push({
-            title: chTitle, href: `/chapter/${encoded}`,
-            date: chDate || undefined,
-            number: chNum ? parseFloat(chNum) : undefined,
-          });
+    // Chapter list from admin-ajax
+    const chapterPromise = mangaIdMatch ? fetchHTML(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaIdMatch[1]}&page=1&action=chapter_list`).catch(() => null) : Promise.resolve(null);
+    // Status from WP REST API (detail page doesn't have status)
+    const statusPromise = fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slug}&_fields=_embedded&_embed=wp:term`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+    }).then(r => r.ok ? r.json() : []).then(data => {
+      if (!data?.[0]?._embedded?.["wp:term"]) return "Unknown";
+      for (const group of data[0]._embedded["wp:term"]) {
+        for (const term of group) {
+          if (term.taxonomy === "status") return term.name || "Unknown";
+        }
+      }
+      return "Unknown";
+    }).catch(() => "Unknown");
+    const [ch$, wpStatus] = await Promise.all([chapterPromise, statusPromise]);
+    if (ch$) {
+      ch$("div[data-chapter-number]").each((_, el) => {
+        const $ch = ch$(el);
+        const chNum = $ch.attr("data-chapter-number") || "";
+        const chLink = $ch.find("a").first();
+        const chHref = chLink.attr("href") || "";
+        const chTitle = $ch.find("span").first().text().trim() || `Chapter ${chNum}`;
+        const chDate = $ch.find("time").attr("datetime") || "";
+        if (!chHref) return;
+        const path = chHref.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+        const parts = path.split("/");
+        if (parts.length < 2) return;
+        const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
+        chapters.push({
+          title: chTitle, href: `/chapter/${encoded}`,
+          date: chDate || undefined,
+          number: chNum ? parseFloat(chNum) : undefined,
         });
-      } catch { /* chapter list fetch failed, skip */ }
+      });
     }
+    status = wpStatus !== "Unknown" ? wpStatus : status;
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status, author, artist,
       genre: genres, rating: rating || undefined, chapters, released,
