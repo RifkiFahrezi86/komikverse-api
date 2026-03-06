@@ -1,8 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "./lib/db";
-import * as jwtLib from "jsonwebtoken";
 
-const jwt = (jwtLib as any).default || jwtLib;
+let jwt: any;
+
+async function loadDeps() {
+  if (!jwt) {
+    const j = await import("jsonwebtoken");
+    jwt = (j as any).default || j;
+  }
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
@@ -45,6 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   setCors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  await loadDeps();
 
   try {
     // GET /api/comments?comic_slug=xxx

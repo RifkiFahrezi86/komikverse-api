@@ -1,10 +1,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "./lib/db";
-import * as bcryptLib from "bcryptjs";
-import * as jwtLib from "jsonwebtoken";
 
-const bcrypt = (bcryptLib as any).default || bcryptLib;
-const jwt = (jwtLib as any).default || jwtLib;
+let bcrypt: any;
+let jwt: any;
+
+async function loadDeps() {
+  if (!bcrypt) {
+    const b = await import("bcryptjs");
+    bcrypt = (b as any).default || b;
+  }
+  if (!jwt) {
+    const j = await import("jsonwebtoken");
+    jwt = (j as any).default || j;
+  }
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
@@ -74,6 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
 
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  await loadDeps();
 
   const ip = (typeof req.headers["x-forwarded-for"] === "string"
     ? req.headers["x-forwarded-for"].split(",")[0].trim()
