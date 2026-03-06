@@ -1,9 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "./lib/db";
-import * as bcryptLib from "bcryptjs";
 
-// Handle both ESM default and named exports
-const bcrypt = (bcryptLib as any).default || bcryptLib;
+// Pre-computed bcrypt hash of 'admin123' (cost 10) — no need to import bcryptjs
+const ADMIN_HASH = "$2b$10$VFfeR324ey/yLn/h/aK2EumR0wQJeDM6I96nclKRN2EgajssQf/DC";
 
 const MIGRATION_SECRET = process.env.MIGRATION_SECRET || process.env.JWT_SECRET || "";
 
@@ -107,10 +106,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Create default admin
-    const adminHash = await bcrypt.hash("admin123", 10);
     await query(
       "INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, 'admin') ON CONFLICT (username) DO NOTHING",
-      ["admin", "admin@komikverse.com", adminHash]
+      ["admin", "admin@komikverse.com", ADMIN_HASH]
     );
 
     return res.status(200).json({ success: true, message: "Migration completed successfully" });
