@@ -8,6 +8,7 @@
     { "source": "/api/admin/:path*", "destination": "/api/admin" },
     { "source": "/api/ads", "destination": "/api/ads" },
     { "source": "/api/migrate", "destination": "/api/migrate" },
+    { "source": "/api/debug", "destination": "/api/debug" },
     { "source": "/api/:path*", "destination": "/api" }
   ],
   "headers": [
