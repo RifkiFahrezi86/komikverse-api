@@ -513,7 +513,8 @@ function kiryuuParseListPage($: cheerio.CheerioAPI): any[] {
     const img = $el.find(".wp-post-image").first();
     const thumbnail = img.attr("src") || img.attr("data-src") || "";
     const typeImg = $el.find("img[alt]").filter((_, e) => /^(manga|manhwa|manhua)$/i.test($(e).attr("alt") || "")).first();
-    const type = (typeImg.attr("alt") || "Manga").replace(/^./, (c) => c.toUpperCase());
+    const typeFromImg = typeImg.attr("alt") || "";
+    const type = typeFromImg ? typeFromImg.replace(/^./, (c) => c.toUpperCase()) : undefined;
     const rating = $el.find(".numscore").first().text().trim();
     // Status is in a <p> element near the status dot
     const statusText = $el.find("p").filter((_, e) => /^(Ongoing|Completed|Hiatus)$/i.test($(e).text().trim())).first().text().trim();
@@ -526,8 +527,49 @@ function kiryuuParseListPage($: cheerio.CheerioAPI): any[] {
       rating: rating || undefined,
       chapter: chapter || undefined,
       status: statusText || undefined,
+      _slug: slug,
     });
   });
+  return comics;
+}
+
+// Resolve missing types for Kiryuu comics using WP REST API batch query
+async function kiryuuResolveTypes(comics: any[]): Promise<any[]> {
+  const missing = comics.filter(c => !c.type);
+  if (missing.length === 0) return comics;
+  const slugs = missing.map(c => c._slug).filter(Boolean);
+  if (slugs.length === 0) return comics;
+  try {
+    const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slugs.join(",")}&_fields=slug,_embedded&_embed=wp:term&per_page=${slugs.length}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const typeMap: Record<string, string> = {};
+      for (const item of data) {
+        const s = item.slug;
+        const terms = item._embedded?.["wp:term"] || [];
+        for (const group of terms) {
+          for (const term of group) {
+            if (term.taxonomy === "type" && term.name && term.name !== "-") {
+              typeMap[s] = term.name;
+            }
+          }
+        }
+      }
+      for (const c of comics) {
+        if (!c.type && c._slug && typeMap[c._slug]) {
+          c.type = typeMap[c._slug];
+        }
+      }
+    }
+  } catch { /* fallback to existing types */ }
+  // Default remaining unknowns to Manga and clean up
+  for (const c of comics) {
+    if (!c.type) c.type = "Manga";
+    delete c._slug;
+  }
   return comics;
 }
 
@@ -536,7 +578,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
   terbaru: async (query) => {
     const page = parseInt(query.page) || 1;
     const $ = await fetchHTML(`${KIRYUU_BASE}/manga/?page=${page}&order=update`);
-    const comics = kiryuuParseListPage($);
+    const comics = await kiryuuResolveTypes(kiryuuParseListPage($));
     const lastPage = $(".pagination a, .hpage a").last().attr("href") || "";
     const pgMatch = lastPage.match(/page[=/](\d+)/);
     const totalPages = pgMatch ? parseInt(pgMatch[1]) : page;
@@ -545,12 +587,12 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
 
   popular: async () => {
     const $ = await fetchHTML(`${KIRYUU_BASE}/manga/?order=popular`);
-    return apiResponse(kiryuuParseListPage($));
+    return apiResponse(await kiryuuResolveTypes(kiryuuParseListPage($)));
   },
 
   recommended: async () => {
     const $ = await fetchHTML(`${KIRYUU_BASE}/manga/?order=rating`);
-    return apiResponse(kiryuuParseListPage($).slice(0, 30));
+    return apiResponse((await kiryuuResolveTypes(kiryuuParseListPage($))).slice(0, 30));
   },
 
   search: async (query) => {
@@ -580,12 +622,13 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
         comics.push({
           title, thumbnail, image: thumbnail,
           href: `/manga/${slug}`,
-          type: "Manga",
+          type: undefined,
           description: description || undefined,
+          _slug: slug,
         });
       }
     });
-    return apiResponse(comics);
+    return apiResponse(await kiryuuResolveTypes(comics));
   },
 
   detail: async (_query, slug) => {
@@ -626,19 +669,21 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     let chapters: any[] = [];
     // Chapter list from admin-ajax
     const chapterPromise = mangaIdMatch ? fetchHTML(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaIdMatch[1]}&page=1&action=chapter_list`).catch(() => null) : Promise.resolve(null);
-    // Status from WP REST API (detail page doesn't have status)
-    const statusPromise = fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slug}&_fields=_embedded&_embed=wp:term`, {
+    // Status and type from WP REST API (detail page doesn't have status, type can be wrong)
+    const wpPromise = fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slug}&_fields=_embedded&_embed=wp:term`, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
     }).then(r => r.ok ? r.json() : []).then(data => {
-      if (!data?.[0]?._embedded?.["wp:term"]) return "Unknown";
+      const result = { status: "Unknown", type: "" };
+      if (!data?.[0]?._embedded?.["wp:term"]) return result;
       for (const group of data[0]._embedded["wp:term"]) {
         for (const term of group) {
-          if (term.taxonomy === "status") return term.name || "Unknown";
+          if (term.taxonomy === "status") result.status = term.name || "Unknown";
+          if (term.taxonomy === "type" && term.name && term.name !== "-") result.type = term.name;
         }
       }
-      return "Unknown";
-    }).catch(() => "Unknown");
-    const [ch$, wpStatus] = await Promise.all([chapterPromise, statusPromise]);
+      return result;
+    }).catch(() => ({ status: "Unknown", type: "" }));
+    const [ch$, wpData] = await Promise.all([chapterPromise, wpPromise]);
     if (ch$) {
       ch$("div[data-chapter-number]").each((_, el) => {
         const $ch = ch$(el);
@@ -659,7 +704,8 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
         });
       });
     }
-    status = wpStatus !== "Unknown" ? wpStatus : status;
+    status = wpData.status !== "Unknown" ? wpData.status : status;
+    if (wpData.type) type = wpData.type;
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status, author, artist,
       genre: genres, rating: rating || undefined, chapters, released,
