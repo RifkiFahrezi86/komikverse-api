@@ -407,20 +407,22 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
       if (t && h) genres.push({ title: t, href: h });
     });
     const uniqueGenres = [...new Map(genres.map(g => [g.href, g])).values()];
-    // Extract all chapter links from the page
+    // Extract all chapter links from the page (hrefs are relative like /slug-chapter-205-6/)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chapters: any[] = [];
-    $("a").each((_, el) => {
+    $("#daftarChapter a, a").each((_, el) => {
       const chHref = $(el).attr("href") || "";
-      const match = chHref.match(/komiku\.org\/([a-z0-9-]+-chapter-[\d.]+)\/?$/i);
+      const match = chHref.match(/\/([a-z0-9][a-z0-9-]+-chapter-[\d]+(?:-\d+)?)\/??$/i);
       if (match) {
         const chSlug = match[1];
-        const numMatch = chSlug.match(/-chapter-([\d.]+)$/);
+        // Convert hyphen-decimal to dot: chapter-205-6 → 205.6
+        const numMatch = chSlug.match(/-chapter-(\d+)(?:-(\d+))?$/);
+        const chNum = numMatch ? parseFloat(`${numMatch[1]}${numMatch[2] ? "." + numMatch[2] : ""}`) : undefined;
         const text = $(el).text().trim();
         chapters.push({
-          title: text.includes("Chapter") ? text : `Chapter ${numMatch?.[1] || ""}`,
+          title: text.includes("Chapter") ? text : `Chapter ${chNum || ""}`,
           href: `/chapter/${chSlug}`,
-          number: numMatch ? parseFloat(numMatch[1]) : undefined,
+          number: chNum,
         });
       }
     });
