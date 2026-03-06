@@ -62,8 +62,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   await loadAll();
 
-  await loadDeps();
-
   try {
     // GET /api/comments?comic_slug=xxx
     if (req.method === "GET") {
