@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KomikVerse API — Dashboard</title>
+  <meta name="description" content="KomikVerse API Dashboard — Monitor API status, latency, and endpoints." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #111118;
+      --bg-card: #16161f;
+      --bg-card-hover: #1c1c28;
+      --border: #2a2a3a;
+      --text-primary: #e0e0ea;
+      --text-secondary: #8a8a9e;
+      --text-muted: #52526a;
+      --accent: #f97316;
+      --accent-dim: #f9731620;
+      --green: #22c55e;
+      --green-dim: #22c55e20;
+      --red: #ef4444;
+      --red-dim: #ef444420;
+      --yellow: #eab308;
+      --yellow-dim: #eab30820;
+      --blue: #3b82f6;
+      --blue-dim: #3b82f620;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+    
+    /* Header */
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2.5rem; flex-wrap: wrap; gap: 1rem; }
+    .header-left { display: flex; align-items: center; gap: 1rem; }
+    .logo { width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent), #fb923c); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+    .header h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+    .header h1 span { color: var(--accent); }
+    .header-badge { padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-online { background: var(--green-dim); color: var(--green); border: 1px solid #22c55e40; }
+    .badge-offline { background: var(--red-dim); color: var(--red); border: 1px solid #ef444440; }
+    .badge-checking { background: var(--yellow-dim); color: var(--yellow); border: 1px solid #eab30840; }
+
+    /* Stats Grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      transition: all 0.2s;
+    }
+    .stat-card:hover { background: var(--bg-card-hover); border-color: #3a3a4a; }
+    .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
+    .stat-sub { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; }
+    .stat-value.green { color: var(--green); }
+    .stat-value.accent { color: var(--accent); }
+    .stat-value.blue { color: var(--blue); }
+
+    /* Latency Bar */
+    .latency-bar-wrapper { margin-top: 0.75rem; }
+    .latency-bar { height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden; }
+    .latency-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+    /* Chart Section */
+    .section { margin-bottom: 2rem; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .section-title { font-size: 1.1rem; font-weight: 700; }
+    .section-badge { font-size: 0.7rem; color: var(--text-muted); background: var(--bg-secondary); padding: 0.3rem 0.7rem; border-radius: 8px; }
+    .chart-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      height: 220px;
+      position: relative;
+      overflow: hidden;
+    }
+    .chart-canvas { width: 100%; height: 100%; }
+    .chart-overlay {
+      position: absolute; top: 1rem; right: 1.5rem;
+      font-size: 0.75rem; color: var(--text-muted);
+    }
+
+    /* Endpoints */
+    .endpoints-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 0.75rem; }
+    .endpoint-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .endpoint-card:hover { background: var(--bg-card-hover); border-color: var(--accent); transform: translateY(-1px); }
+    .endpoint-left { display: flex; align-items: center; gap: 0.75rem; }
+    .method-badge {
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid #22c55e30;
+    }
+    .endpoint-path { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem; font-weight: 500; }
+    .endpoint-desc { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.15rem; }
+    .endpoint-status { font-size: 0.7rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; }
+    .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot-gray { background: var(--text-muted); }
+    .dot-red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+    /* Test Panel */
+    .test-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: none;
+    }
+    .test-panel.active { display: block; }
+    .test-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .test-url {
+      flex: 1;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.65rem 1rem;
+      color: var(--text-primary);
+      font-family: monospace;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .test-url:focus { border-color: var(--accent); }
+    .test-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.65rem 1.5rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-left: 0.75rem;
+      transition: all 0.2s;
+    }
+    .test-btn:hover { background: #ea6c10; transform: scale(1.02); }
+    .test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .test-response {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .test-meta { display: flex; gap: 1rem; margin-bottom: 0.75rem; }
+    .test-meta-item { font-size: 0.75rem; color: var(--text-muted); }
+    .test-meta-item span { color: var(--text-primary); font-weight: 600; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 0;
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
+    }
+    .footer p { font-size: 0.8rem; color: var(--text-muted); }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Pulse animation */
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pulse { animation: pulse 2s infinite; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .container { padding: 1.25rem 1rem; }
+      .header h1 { font-size: 1.2rem; }
+      .stat-value { font-size: 1.5rem; }
+      .endpoints-grid { grid-template-columns: 1fr; }
+      .test-header { flex-direction: column; }
+      .test-btn { margin: 0.75rem 0 0 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="logo">⚡</div>
+        <div>
+          <h1>Komik<span>Verse</span> API</h1>
+          <p style="font-size:0.75rem;color:var(--text-muted)">Real-time monitoring dashboard</p>
+        </div>
+      </div>
+      <span id="statusBadge" class="header-badge badge-checking">● Checking...</span>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">API Status</div>
+        <div class="stat-value green" id="apiStatus">—</div>
+        <div class="stat-sub" id="apiStatusSub">Checking...</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Latency</div>
+        <div class="stat-value accent" id="latencyValue">—</div>
+        <div class="latency-bar-wrapper">
+          <div class="latency-bar"><div class="latency-bar-fill" id="latencyBar" style="width:0%; background:var(--green)"></div></div>
+        </div>
+        <div class="stat-sub" id="latencySub">Measuring...</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Requests (Session)</div>
+        <div class="stat-value blue" id="requestCount">0</div>
+        <div class="stat-sub" id="requestSub">Since page load</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Response Time</div>
+        <div class="stat-value" id="avgResponse" style="color:var(--yellow)">—</div>
+        <div class="stat-sub" id="avgResponseSub">Calculating...</div>
+      </div>
+    </div>
+
+    <!-- Latency Chart -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">📊 Response Time History</span>
+        <span class="section-badge" id="chartLabel">Last 30 pings</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="latencyChart" class="chart-canvas"></canvas>
+        <div class="chart-overlay" id="chartOverlay"></div>
+      </div>
+    </div>
+
+    <!-- Live Test Panel -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🧪 Live API Tester</span>
+        <span class="section-badge">Try endpoints</span>
+      </div>
+      <div class="test-panel active" id="testPanel">
+        <div class="test-header">
+          <input type="text" class="test-url" id="testUrl" value="/api/health" placeholder="/api/endpoint" />
+          <button class="test-btn" id="testBtn" onclick="runTest()">Send Request</button>
+        </div>
+        <div class="test-meta" id="testMeta" style="display:none">
+          <div class="test-meta-item">Status: <span id="testStatus">—</span></div>
+          <div class="test-meta-item">Time: <span id="testTime">—</span></div>
+          <div class="test-meta-item">Size: <span id="testSize">—</span></div>
+        </div>
+        <div class="test-response" id="testResponse">Response will appear here...</div>
+      </div>
+    </div>
+
+    <!-- Endpoints -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🔗 API Endpoints</span>
+        <span class="section-badge" id="endpointCount">8 endpoints</span>
+      </div>
+      <div class="endpoints-grid" id="endpointsGrid"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>KomikVerse API v1.0 — Built by <a href="https://komikverse-swart.vercel.app" target="_blank">Rifki Nur Fahrezi Ahmad</a></p>
+      <p style="margin-top:0.4rem">Powered by Vercel Serverless Functions</p>
+    </div>
+  </div>
+
+  <script>
+    const BASE = window.location.origin;
+    let requestCount = 0;
+    let latencyHistory = [];
+    let responseTimes = [];
+
+    const endpoints = [
+      { path: "/api/health", desc: "Health check & status", method: "GET" },
+      { path: "/api/terbaru?page=1", desc: "Latest manga updates", method: "GET" },
+      { path: "/api/popular", desc: "Popular manga list", method: "GET" },
+      { path: "/api/recommended", desc: "Recommended manga", method: "GET" },
+      { path: "/api/search?keyword=naruto", desc: "Search manga by keyword", method: "GET" },
+      { path: "/api/detail/{slug}", desc: "Manga detail by slug", method: "GET" },
+      { path: "/api/read/{chapter-slug}", desc: "Read chapter panels", method: "GET" },
+      { path: "/api/genre", desc: "List all genres", method: "GET" },
+    ];
+
+    // Render endpoints
+    function renderEndpoints() {
+      const grid = document.getElementById("endpointsGrid");
+      grid.innerHTML = endpoints.map((ep, i) => `
+        <div class="endpoint-card" onclick="testEndpoint('${ep.path}')">
+          <div class="endpoint-left">
+            <span class="method-badge">${ep.method}</span>
+            <div>
+              <div class="endpoint-path">${ep.path}</div>
+              <div class="endpoint-desc">${ep.desc}</div>
+            </div>
+          </div>
+          <div class="endpoint-status" id="ep-status-${i}">
+            <span class="dot dot-gray"></span>
+            idle
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function testEndpoint(path) {
+      document.getElementById("testUrl").value = path;
+      runTest();
+      document.getElementById("testPanel").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    // Ping health endpoint
+    async function pingHealth() {
+      const start = performance.now();
+      try {
+        const res = await fetch(BASE + "/api/health");
+        const ms = Math.round(performance.now() - start);
+        const data = await res.json();
+        requestCount++;
+        responseTimes.push(ms);
+        latencyHistory.push(ms);
+        if (latencyHistory.length > 30) latencyHistory.shift();
+        updateUI(true, ms, data);
+      } catch {
+        const ms = Math.round(performance.now() - start);
+        latencyHistory.push(-1);
+        if (latencyHistory.length > 30) latencyHistory.shift();
+        updateUI(false, ms);
+      }
+    }
+
+    function updateUI(online, ms, data) {
+      // Status
+      const badge = document.getElementById("statusBadge");
+      const status = document.getElementById("apiStatus");
+      const statusSub = document.getElementById("apiStatusSub");
+      if (online) {
+        badge.className = "header-badge badge-online";
+        badge.textContent = "● Online";
+        status.textContent = "Operational";
+        status.style.color = "var(--green)";
+        statusSub.textContent = data?.timestamp ? `Last check: ${new Date(data.timestamp).toLocaleTimeString()}` : "Connected";
+      } else {
+        badge.className = "header-badge badge-offline";
+        badge.textContent = "● Offline";
+        status.textContent = "Down";
+        status.style.color = "var(--red)";
+        statusSub.textContent = "API unreachable";
+      }
+
+      // For 403 (auth required), still show as online
+      if (!online && ms < 5000) {
+        badge.className = "header-badge badge-online";
+        badge.textContent = "● Online";
+        status.textContent = "Secured";
+        status.style.color = "var(--green)";
+        statusSub.textContent = "Auth required (403) — API is running";
+      }
+
+      // Latency
+      const latVal = document.getElementById("latencyValue");
+      const latBar = document.getElementById("latencyBar");
+      const latSub = document.getElementById("latencySub");
+      latVal.textContent = ms + "ms";
+      const pct = Math.min(ms / 2000 * 100, 100);
+      latBar.style.width = pct + "%";
+      latBar.style.background = ms < 300 ? "var(--green)" : ms < 800 ? "var(--yellow)" : "var(--red)";
+      latSub.textContent = ms < 300 ? "Excellent" : ms < 800 ? "Good" : "Slow";
+
+      // Request count
+      document.getElementById("requestCount").textContent = requestCount;
+
+      // Avg response
+      if (responseTimes.length > 0) {
+        const avg = Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length);
+        document.getElementById("avgResponse").textContent = avg + "ms";
+        document.getElementById("avgResponseSub").textContent = `Based on ${responseTimes.length} requests`;
+      }
+
+      drawChart();
+    }
+
+    // Chart drawing
+    function drawChart() {
+      const canvas = document.getElementById("latencyChart");
+      const ctx = canvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      canvas.style.width = rect.width + "px";
+      canvas.style.height = rect.height + "px";
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      const pad = { top: 20, right: 20, bottom: 30, left: 50 };
+      const cw = w - pad.left - pad.right;
+      const ch = h - pad.top - pad.bottom;
+
+      ctx.clearRect(0, 0, w, h);
+
+      if (latencyHistory.length < 2) {
+        ctx.fillStyle = "#52526a";
+        ctx.font = "13px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Collecting data...", w / 2, h / 2);
+        return;
+      }
+
+      const validPings = latencyHistory.filter(v => v > 0);
+      const maxMs = Math.max(...validPings, 100);
+
+      // Grid lines
+      ctx.strokeStyle = "#1e1e2e";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + (ch / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(w - pad.right, y);
+        ctx.stroke();
+        ctx.fillStyle = "#52526a";
+        ctx.font = "10px Inter, sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(Math.round(maxMs - (maxMs / 4) * i) + "ms", pad.left - 8, y + 4);
+      }
+
+      // Line
+      ctx.beginPath();
+      ctx.strokeStyle = "#f97316";
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+
+      const stepX = cw / (latencyHistory.length - 1);
+      latencyHistory.forEach((v, i) => {
+        if (v < 0) return;
+        const x = pad.left + i * stepX;
+        const y = pad.top + ch - (v / maxMs) * ch;
+        if (i === 0 || latencyHistory[i - 1] < 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Fill gradient
+      const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      gradient.addColorStop(0, "rgba(249,115,22,0.3)");
+      gradient.addColorStop(1, "rgba(249,115,22,0)");
+      ctx.lineTo(pad.left + (latencyHistory.length - 1) * stepX, pad.top + ch);
+      ctx.lineTo(pad.left, pad.top + ch);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Dots
+      latencyHistory.forEach((v, i) => {
+        if (v < 0) return;
+        const x = pad.left + i * stepX;
+        const y = pad.top + ch - (v / maxMs) * ch;
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = v < 300 ? "#22c55e" : v < 800 ? "#eab308" : "#ef4444";
+        ctx.fill();
+      });
+    }
+
+    // Live test
+    async function runTest() {
+      const urlInput = document.getElementById("testUrl");
+      const btn = document.getElementById("testBtn");
+      const respEl = document.getElementById("testResponse");
+      const metaEl = document.getElementById("testMeta");
+
+      let path = urlInput.value.trim();
+      if (!path.startsWith("/")) path = "/" + path;
+
+      btn.disabled = true;
+      btn.textContent = "Sending...";
+      respEl.textContent = "Loading...";
+      respEl.style.color = "var(--text-muted)";
+
+      const start = performance.now();
+      try {
+        const res = await fetch(BASE + path);
+        const ms = Math.round(performance.now() - start);
+        const text = await res.text();
+        requestCount++;
+        responseTimes.push(ms);
+        document.getElementById("requestCount").textContent = requestCount;
+
+        metaEl.style.display = "flex";
+        document.getElementById("testStatus").textContent = res.status + " " + res.statusText;
+        document.getElementById("testStatus").style.color = res.ok ? "var(--green)" : "var(--red)";
+        document.getElementById("testTime").textContent = ms + "ms";
+        document.getElementById("testSize").textContent = formatBytes(text.length);
+
+        try {
+          const json = JSON.parse(text);
+          respEl.textContent = JSON.stringify(json, null, 2);
+          respEl.style.color = "var(--text-primary)";
+        } catch {
+          respEl.textContent = text;
+          respEl.style.color = "var(--text-primary)";
+        }
+      } catch (err) {
+        respEl.textContent = "Error: " + err.message;
+        respEl.style.color = "var(--red)";
+        metaEl.style.display = "none";
+      }
+
+      btn.disabled = false;
+      btn.textContent = "Send Request";
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / 1048576).toFixed(1) + " MB";
+    }
+
+    // Init
+    renderEndpoints();
+    pingHealth();
+    setInterval(pingHealth, 10000); // Ping every 10s
+    window.addEventListener("resize", drawChart);
+  </script>
+</body>
+</html>

@@ -336,8 +336,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(429).json(apiError("Too many requests. Please wait.", 429));
   }
 
-  // Token validation (if API_SECRET is configured)
-  if (!isValidToken(req)) {
+  // Parse path early to check if health endpoint (skip auth for health/dashboard)
+  const urlPath = (req.url || "/").split("?")[0].replace(/^\/api\/?/, "");
+  const routeName = urlPath.split("/").filter(Boolean)[0] || "health";
+
+  // Token validation (skip for health endpoint — needed for dashboard ping)
+  if (routeName !== "health" && !isValidToken(req)) {
     return res.status(403).json(apiError("Forbidden", 403));
   }
 
