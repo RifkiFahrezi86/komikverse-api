@@ -78,6 +78,7 @@ function isAuthRateLimited(ip: string): boolean {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  try {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   setCors(req, res);
@@ -92,8 +93,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const path = (req.url || "").split("?")[0].replace(/^\/api\/auth\/?/, "");
   const action = path.split("/")[0] || "";
-
-  try {
     // GET /api/auth/me
     if (req.method === "GET" && action === "me") {
       const token = getTokenFromRequest(req);
@@ -227,8 +226,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(404).json({ error: "Not found" });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Auth error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ 
+      error: "Internal server error",
+      debug_message: error?.message || String(error),
+      debug_stack: error?.stack?.split("\n").slice(0, 5)
+    });
   }
 }
