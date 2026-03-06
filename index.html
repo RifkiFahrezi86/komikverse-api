@@ -243,6 +243,11 @@
         <div class="stat-value" id="avgResponse" style="color:var(--yellow)">—</div>
         <div class="stat-sub" id="avgResponseSub">Calculating...</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">Data Providers</div>
+        <div class="stat-value accent">3</div>
+        <div class="stat-sub">Shinigami · Komiku · Kiryuu</div>
+      </div>
     </div>
 
     <!-- Latency Chart -->
@@ -281,7 +286,7 @@
     <div class="section">
       <div class="section-header">
         <span class="section-title">🔗 API Endpoints</span>
-        <span class="section-badge" id="endpointCount">8 endpoints</span>
+        <span class="section-badge" id="endpointCount">10 endpoints</span>
       </div>
       <div class="endpoints-grid" id="endpointsGrid"></div>
     </div>
@@ -301,13 +306,15 @@
 
     const endpoints = [
       { path: "/api/health", desc: "Health check & status", method: "GET" },
-      { path: "/api/terbaru?page=1", desc: "Latest manga updates", method: "GET" },
-      { path: "/api/popular", desc: "Popular manga list", method: "GET" },
-      { path: "/api/recommended", desc: "Recommended manga", method: "GET" },
-      { path: "/api/search?keyword=naruto", desc: "Search manga by keyword", method: "GET" },
-      { path: "/api/detail/{slug}", desc: "Manga detail by slug", method: "GET" },
-      { path: "/api/read/{chapter-slug}", desc: "Read chapter panels", method: "GET" },
-      { path: "/api/genre", desc: "List all genres", method: "GET" },
+      { path: "/api/terbaru?page=1&provider=shinigami", desc: "Latest manga updates (Shinigami)", method: "GET" },
+      { path: "/api/terbaru?page=1&provider=komiku", desc: "Latest manga updates (Komiku)", method: "GET" },
+      { path: "/api/terbaru?page=1&provider=kiryuu", desc: "Latest manga updates (Kiryuu)", method: "GET" },
+      { path: "/api/popular?provider=shinigami", desc: "Popular manga list", method: "GET" },
+      { path: "/api/search?keyword=naruto&provider=shinigami", desc: "Search manga by keyword", method: "GET" },
+      { path: "/api/detail/{slug}?provider=shinigami", desc: "Manga detail by slug", method: "GET" },
+      { path: "/api/read/{chapter-slug}?provider=shinigami", desc: "Read chapter panels", method: "GET" },
+      { path: "/api/genre?provider=shinigami", desc: "List all genres", method: "GET" },
+      { path: "/api/recommended?provider=komiku", desc: "Recommended manga (Komiku)", method: "GET" },
     ];
 
     // Render endpoints

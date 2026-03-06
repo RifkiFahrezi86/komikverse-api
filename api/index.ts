@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { request } from "undici";
 import crypto from "crypto";
+import * as cheerio from "cheerio";
 
 // ─── Security Config ───
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
@@ -55,7 +56,7 @@ function isSafeInput(value: string): boolean {
 
 function sanitizeSlug(slug: string): string {
   // Only allow alphanumeric, hyphens, underscores
-  return slug.replace(/[^a-zA-Z0-9\-_]/g, "");
+  return slug.replace(/[^a-zA-Z0-9\-_.]/g, "");
 }
 
 // ─── Shinigami API Config ───
@@ -84,6 +85,20 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<unkno
     }
   }
   throw new Error(`Failed to fetch ${url} after ${retries} retries`);
+}
+
+// ─── HTML Scraping Utility ───
+async function fetchHTML(url: string): Promise<cheerio.CheerioAPI> {
+  const { statusCode, body } = await request(url, {
+    headers: {
+      "User-Agent": DEFAULT_HEADERS["User-Agent"],
+      Accept: "text/html,application/xhtml+xml",
+      "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+    },
+  });
+  const html = await body.text();
+  if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
+  return cheerio.load(html);
 }
 
 // ─── Shinigami API calls ───
@@ -231,7 +246,7 @@ function apiError(message: string, code = 500) {
 
 // ─── Route handlers ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const handlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
+const shinigamiHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
   terbaru: async (query) => {
     const page = parseInt(query.page) || 1;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -301,8 +316,344 @@ const handlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
 
   health: async () => ({
     status: "ok",
+    providers: ["shinigami", "komiku", "kiryuu"],
     timestamp: new Date().toISOString(),
   }),
+};
+
+// ─── Komiku Provider (komiku.org) ───
+const KOMIKU_BASE = "https://komiku.org";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function komikuParseListPage($: cheerio.CheerioAPI): any[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const comics: any[] = [];
+  $(".ls4").each((_, el) => {
+    const $el = $(el);
+    const mangaLink = $el.find("a[href*='/manga/']").first();
+    const href = mangaLink.attr("href") || "";
+    const slug = href.replace(/https?:\/\/komiku\.org\/manga\//, "").replace(/\/$/, "");
+    if (!slug) return;
+    const title = $el.find("h3").text().trim() || $el.find("a[href*='/manga/']").eq(1).text().trim();
+    const img = $el.find("img");
+    const thumbnail = img.attr("src") || img.attr("data-src") || "";
+    const firstText = $el.find("a").first().text().trim();
+    const type = firstText.match(/^(Manga|Manhwa|Manhua)/i)?.[1] || "Manga";
+    const genre = firstText.replace(/^(Manga|Manhwa|Manhua)\s*/i, "").replace(/\s*UP\s*\d+$/i, "").trim();
+    const description = $el.find("p").text().trim();
+    const chapterLinks = $el.find("a[href*='chapter']");
+    const latestCh = chapterLinks.last().text().replace(/^Terbaru:\s*/, "").trim();
+    if (title) {
+      comics.push({
+        title, thumbnail, image: thumbnail,
+        href: `/manga/${slug}`, type, description,
+        genre: genre || undefined,
+        chapter: latestCh || undefined,
+      });
+    }
+  });
+  return comics;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
+  terbaru: async (query) => {
+    const page = parseInt(query.page) || 1;
+    const $ = await fetchHTML(`${KOMIKU_BASE}/pustaka/?orderby=modified&page=${page}`);
+    return apiResponse(komikuParseListPage($));
+  },
+
+  popular: async () => {
+    const $ = await fetchHTML(`${KOMIKU_BASE}/other/hot/`);
+    return apiResponse(komikuParseListPage($));
+  },
+
+  recommended: async () => {
+    const $ = await fetchHTML(`${KOMIKU_BASE}/pustaka/?orderby=meta_value_num`);
+    return apiResponse(komikuParseListPage($).slice(0, 30));
+  },
+
+  search: async (query) => {
+    const keyword = query.keyword;
+    if (!keyword) return apiError("Parameter 'keyword' diperlukan", 400);
+    const $ = await fetchHTML(`${KOMIKU_BASE}/pustaka/?keyword=${encodeURIComponent(keyword)}`);
+    return apiResponse(komikuParseListPage($));
+  },
+
+  detail: async (_query, slug) => {
+    if (!slug) return apiError("Slug required", 400);
+    const $ = await fetchHTML(`${KOMIKU_BASE}/manga/${slug}/`);
+    const title = $("h1").first().text().replace(/^Komik\s+/i, "").trim();
+    const thumbnail = $(".ims img, .komik_info-content-thumbnail img, .thumb img").attr("src") || "";
+    const description = $(".sinopsis p, .shortcsc p, #Sinopsis p").map((_, e) => $(e).text().trim()).get().join("\n") ||
+      $(".entry-content p").first().text().trim();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const infoTable: Record<string, string> = {};
+    $("table tr").each((_, row) => {
+      const cells = $(row).find("td");
+      if (cells.length >= 2) {
+        infoTable[$(cells[0]).text().trim().toLowerCase()] = $(cells[1]).text().trim();
+      }
+    });
+    const type = infoTable["jenis komik"] || "Manga";
+    const author = infoTable["pengarang"] || "";
+    const status = infoTable["status"] || "Unknown";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const genres: any[] = [];
+    $("a[href*='/genre/']").each((_, el) => {
+      const t = $(el).text().trim();
+      const h = ($(el).attr("href") || "").replace(/https?:\/\/komiku\.org/, "").replace(/\/$/, "");
+      if (t && h) genres.push({ title: t, href: h });
+    });
+    const uniqueGenres = [...new Map(genres.map(g => [g.href, g])).values()];
+    // Extract all chapter links from the page
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chapters: any[] = [];
+    $("a").each((_, el) => {
+      const chHref = $(el).attr("href") || "";
+      const match = chHref.match(/komiku\.org\/([a-z0-9-]+-chapter-[\d.]+)\/?$/i);
+      if (match) {
+        const chSlug = match[1];
+        const numMatch = chSlug.match(/-chapter-([\d.]+)$/);
+        const text = $(el).text().trim();
+        chapters.push({
+          title: text.includes("Chapter") ? text : `Chapter ${numMatch?.[1] || ""}`,
+          href: `/chapter/${chSlug}`,
+          number: numMatch ? parseFloat(numMatch[1]) : undefined,
+        });
+      }
+    });
+    const uniqueChapters = [...new Map(chapters.map(c => [c.href, c])).values()]
+      .sort((a, b) => (b.number || 0) - (a.number || 0));
+    return apiResponse({
+      title, thumbnail, image: thumbnail, description, type, status, author,
+      genre: uniqueGenres, chapters: uniqueChapters,
+      alternative: infoTable["judul indonesia"] || "",
+      released: infoTable["released"] || "",
+    });
+  },
+
+  read: async (_query, slug) => {
+    if (!slug) return apiError("Slug required", 400);
+    const $ = await fetchHTML(`${KOMIKU_BASE}/${slug}/`);
+    const images: string[] = [];
+    $("#Baca_Komik img, .chapter_body img, .entry-content.entry-content-single img").each((_, el) => {
+      const src = $(el).attr("src") || $(el).attr("data-src") || "";
+      if (src && !src.includes("icon") && !src.includes("logo") && !src.includes("avatar") && src.includes("komiku")) {
+        images.push(src);
+      }
+    });
+    const title = $("h1").first().text().trim();
+    const prevHref = $("a[rel='prev']").attr("href") || "";
+    const nextHref = $("a[rel='next']").attr("href") || "";
+    const toSlug = (u: string) => u ? u.replace(/https?:\/\/komiku\.org\//, "").replace(/\/$/, "") || undefined : undefined;
+    return apiResponse([{ title, panel: images, prev_chapter_id: toSlug(prevHref), next_chapter_id: toSlug(nextHref) }]);
+  },
+
+  genre: async (query, slug) => {
+    if (slug) {
+      const page = parseInt(query.page) || 1;
+      const $ = await fetchHTML(`${KOMIKU_BASE}/genre/${slug}/?page=${page}`);
+      return apiResponse(komikuParseListPage($));
+    }
+    const knownGenres = [
+      "action","adventure","comedy","cooking","demons","drama","ecchi","fantasy",
+      "game","gore","harem","historical","horror","isekai","josei","magic",
+      "martial-arts","mature","mecha","military","monster-girls","music","mystery",
+      "one-shot","psychological","romance","school","school-life","sci-fi","seinen",
+      "shoujo","shoujo-ai","shounen","shounen-ai","slice-of-life","sports",
+      "super-power","supernatural","thriller","tragedy","vampire","webtoon",
+    ];
+    return apiResponse(knownGenres.map(g => ({
+      title: g.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      href: `/genre/${g}`,
+    })));
+  },
+
+  health: async () => ({ status: "ok", provider: "komiku", timestamp: new Date().toISOString() }),
+};
+
+// ─── Kiryuu Provider (v1.kiryuu.to) ───
+const KIRYUU_BASE = "https://v1.kiryuu.to";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function kiryuuParseListPage($: cheerio.CheerioAPI): any[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const comics: any[] = [];
+  $(".bs .bsx").each((_, el) => {
+    const $el = $(el);
+    const link = $el.find("a").first();
+    const href = link.attr("href") || "";
+    const slug = href.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+    if (!slug || slug.includes("/")) return;
+    const title = $el.find(".tt, .bigor .tt").text().trim() || link.attr("title") || "";
+    const img = $el.find("img");
+    const thumbnail = img.attr("src") || img.attr("data-src") || "";
+    const type = $el.find(".typez").text().trim() || "Manga";
+    const rating = $el.find(".numscore").text().trim();
+    const statusText = $el.find(".status i").text().trim();
+    const chapterEl = $el.find(".epxs a, .adds .epxs a").first();
+    const chapter = chapterEl.text().trim();
+    if (title) {
+      comics.push({
+        title, thumbnail, image: thumbnail,
+        href: `/manga/${slug}`, type,
+        rating: rating || undefined,
+        chapter: chapter || undefined,
+        status: statusText || undefined,
+      });
+    }
+  });
+  return comics;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
+  terbaru: async (query) => {
+    const page = parseInt(query.page) || 1;
+    const $ = await fetchHTML(`${KIRYUU_BASE}/manga/?page=${page}&order=update`);
+    const comics = kiryuuParseListPage($);
+    const lastPage = $(".pagination a, .hpage a").last().attr("href") || "";
+    const pgMatch = lastPage.match(/page[=/](\d+)/);
+    const totalPages = pgMatch ? parseInt(pgMatch[1]) : page;
+    return apiResponse(comics, { current_page: page, length_page: totalPages, has_next: page < totalPages, has_prev: page > 1 });
+  },
+
+  popular: async () => {
+    const $ = await fetchHTML(`${KIRYUU_BASE}/manga/?order=popular`);
+    return apiResponse(kiryuuParseListPage($));
+  },
+
+  recommended: async () => {
+    const $ = await fetchHTML(`${KIRYUU_BASE}/manga/?order=rating`);
+    return apiResponse(kiryuuParseListPage($).slice(0, 30));
+  },
+
+  search: async (query) => {
+    const keyword = query.keyword;
+    if (!keyword) return apiError("Parameter 'keyword' diperlukan", 400);
+    const $ = await fetchHTML(`${KIRYUU_BASE}/?s=${encodeURIComponent(keyword)}`);
+    return apiResponse(kiryuuParseListPage($));
+  },
+
+  detail: async (_query, slug) => {
+    if (!slug) return apiError("Slug required", 400);
+    const $ = await fetchHTML(`${KIRYUU_BASE}/manga/${slug}/`);
+    const title = $(".entry-title").text().trim() || $("h1").first().text().trim();
+    const thumbnail = $(".thumb img").attr("src") || $(".thumb img").attr("data-src") || "";
+    const description = $(".entry-content[itemprop='description']").text().trim() ||
+      $(".synp .entry-content").text().trim() || $(".entry-content p").first().text().trim();
+    const type = $(".tsinfo .imptdt:contains('Type') a").text().trim() ||
+      $(".spe span:contains('Type')").text().replace("Type", "").trim() || "Manga";
+    const status = $(".tsinfo .imptdt:contains('Status') i").text().trim() ||
+      $(".spe span:contains('Status')").text().replace("Status", "").trim() || "Unknown";
+    const author = $(".tsinfo .imptdt:contains('Author') i").text().trim() ||
+      $(".spe span:contains('Author')").text().replace("Author", "").trim() || "";
+    const artist = $(".tsinfo .imptdt:contains('Artist') i").text().trim() ||
+      $(".spe span:contains('Artist')").text().replace("Artist", "").trim() || "";
+    const released = $(".tsinfo .imptdt:contains('Released') i").text().trim() ||
+      $(".spe span:contains('Released')").text().replace("Released", "").trim() || "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const genres: any[] = [];
+    $(".mgen a, .seriestugenre a").each((_, el) => {
+      const t = $(el).text().trim();
+      const h = ($(el).attr("href") || "").replace(/https?:\/\/v1\.kiryuu\.to/, "").replace(/\/$/, "");
+      if (t && h) genres.push({ title: t, href: h });
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chapters: any[] = [];
+    $("#chapterlist li, .eplister ul li").each((_, el) => {
+      const $li = $(el);
+      const chLink = $li.find("a").first();
+      const chHref = chLink.attr("href") || "";
+      const chTitle = $li.find(".chapternum").text().trim() || chLink.text().trim();
+      const chDate = $li.find(".chapterdate").text().trim();
+      if (!chHref || !chTitle) return;
+      const path = chHref.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+      const parts = path.split("/");
+      if (parts.length < 2) return;
+      const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
+      const numMatch = chTitle.match(/chapter\s*([\d.]+)/i);
+      chapters.push({
+        title: chTitle, href: `/chapter/${encoded}`,
+        date: chDate || undefined,
+        number: numMatch ? parseFloat(numMatch[1]) : undefined,
+      });
+    });
+    const rating = $(".num[itemprop='ratingValue'], .rating .num").text().trim();
+    return apiResponse({
+      title, thumbnail, image: thumbnail, description, type, status, author, artist,
+      genre: genres, rating: rating || undefined, chapters, released,
+    });
+  },
+
+  read: async (_query, slug) => {
+    if (!slug) return apiError("Slug required", 400);
+    const sepIdx = slug.indexOf("--");
+    let url: string;
+    if (sepIdx !== -1) {
+      url = `${KIRYUU_BASE}/manga/${slug.substring(0, sepIdx)}/${slug.substring(sepIdx + 2)}/`;
+    } else {
+      url = `${KIRYUU_BASE}/manga/${slug}/`;
+    }
+    const $ = await fetchHTML(url);
+    const images: string[] = [];
+    $("#readerarea img").each((_, el) => {
+      const src = $(el).attr("src") || $(el).attr("data-src") || "";
+      if (src && !src.includes("icon") && !src.includes("logo") && !src.includes("svg") && !src.includes("avatar")) {
+        images.push(src.trim());
+      }
+    });
+    const title = $(".entry-title").text().trim() || $("h1").first().text().trim();
+    const prevHref = $("a[rel='prev'], .ch-prev-btn").attr("href") || "";
+    const nextHref = $("a[rel='next'], .ch-next-btn").attr("href") || "";
+    const encodeNav = (href: string): string | undefined => {
+      if (!href) return undefined;
+      const p = href.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+      const ps = p.split("/");
+      return ps.length >= 2 ? `${ps[0]}--${ps.slice(1).join("/")}` : undefined;
+    };
+    return apiResponse([{ title, panel: images, prev_chapter_id: encodeNav(prevHref), next_chapter_id: encodeNav(nextHref) }]);
+  },
+
+  genre: async (query, slug) => {
+    if (slug) {
+      const page = parseInt(query.page) || 1;
+      const $ = await fetchHTML(`${KIRYUU_BASE}/genre/${slug}/?page=${page}`);
+      return apiResponse(kiryuuParseListPage($));
+    }
+    const $ = await fetchHTML(`${KIRYUU_BASE}/manga/`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const genres: any[] = [];
+    $("a[href*='/genre/']").each((_, el) => {
+      const t = $(el).text().trim();
+      const h = ($(el).attr("href") || "").replace(/https?:\/\/v1\.kiryuu\.to/, "").replace(/\/$/, "");
+      const genreSlug = h.replace(/^\/genre\//, "");
+      if (t && genreSlug && !genres.find(g => g.href === `/genre/${genreSlug}`)) {
+        genres.push({ title: t, href: `/genre/${genreSlug}` });
+      }
+    });
+    if (genres.length === 0) {
+      const fallback = ["action","adventure","comedy","drama","fantasy","harem","horror","isekai",
+        "martial-arts","mystery","psychological","romance","school-life","sci-fi","seinen",
+        "shoujo","shounen","slice-of-life","sports","supernatural","thriller","tragedy"];
+      return apiResponse(fallback.map(g => ({
+        title: g.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+        href: `/genre/${g}`,
+      })));
+    }
+    return apiResponse(genres);
+  },
+
+  health: async () => ({ status: "ok", provider: "kiryuu", timestamp: new Date().toISOString() }),
+};
+
+// ─── Provider Routing ───
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const providers: Record<string, Record<string, (query: any, slug?: string) => Promise<any>>> = {
+  shinigami: shinigamiHandlers,
+  komiku: komikuHandlers,
+  kiryuu: kiryuuHandlers,
 };
 
 // ─── Main handler ───
@@ -371,7 +722,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const handlerFn = handlers[route];
+    // Provider routing
+    const provider = (typeof req.query.provider === "string" ? req.query.provider : "shinigami").toLowerCase();
+    const providerHandlers = route === "health" ? shinigamiHandlers : providers[provider];
+    if (!providerHandlers) {
+      return res.status(400).json(apiError(`Unknown provider: ${provider}`, 400));
+    }
+    const handlerFn = providerHandlers[route];
     if (!handlerFn) {
       return res.status(404).json(apiError("Endpoint not found", 404));
     }
