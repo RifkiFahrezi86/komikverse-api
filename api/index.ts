@@ -160,6 +160,44 @@ function getStatusText(s: number) {
   return s === 1 ? "Ongoing" : s === 2 ? "Completed" : s === 3 ? "Hiatus" : "Unknown";
 }
 
+// ─── AniList Status (authoritative source) ───
+const anilistCache = new Map<string, { status: string; ts: number }>();
+const ANILIST_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function mapAniListStatus(s: string): string {
+  switch (s) {
+    case "FINISHED": return "Completed";
+    case "RELEASING": return "Ongoing";
+    case "HIATUS": return "Hiatus";
+    case "NOT_YET_RELEASED": return "Upcoming";
+    case "CANCELLED": return "Cancelled";
+    default: return "Unknown";
+  }
+}
+
+async function fetchAniListStatus(title: string): Promise<string> {
+  if (!title) return "Unknown";
+  const key = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const cached = anilistCache.get(key);
+  if (cached && Date.now() - cached.ts < ANILIST_CACHE_TTL) return cached.status;
+  try {
+    const query = `query ($search: String) { Media(search: $search, type: MANGA) { status } }`;
+    const resp = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ query, variables: { search: title } }),
+    });
+    if (!resp.ok) return "Unknown";
+    const json = await resp.json() as { data?: { Media?: { status?: string } } };
+    const raw = json.data?.Media?.status || "";
+    const status = mapAniListStatus(raw);
+    anilistCache.set(key, { status, ts: Date.now() });
+    return status;
+  } catch {
+    return "Unknown";
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformComic(m: any) {
   return {
@@ -289,6 +327,9 @@ const shinigamiHandlers: Record<string, (query: any, slug?: string) => Promise<a
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const comic: any = transformComicDetail(detailResult.data);
     comic.chapters = chapterResult.retcode === 0 ? transformChapters(chapterResult.data || []) : [];
+    // Override status with AniList (authoritative)
+    const aniStatus = await fetchAniListStatus(comic.title);
+    if (aniStatus !== "Unknown") comic.status = aniStatus;
     return apiResponse(comic);
   },
 
@@ -428,8 +469,11 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     });
     const uniqueChapters = [...new Map(chapters.map(c => [c.href, c])).values()]
       .sort((a, b) => (b.number || 0) - (a.number || 0));
+    // Override status with AniList (authoritative)
+    const aniStatus = await fetchAniListStatus(title);
+    const finalStatus = aniStatus !== "Unknown" ? aniStatus : (status === "End" || status === "Tamat" ? "Completed" : status);
     return apiResponse({
-      title, thumbnail, image: thumbnail, description, type, status, author,
+      title, thumbnail, image: thumbnail, description, type, status: finalStatus, author,
       genre: uniqueGenres, chapters: uniqueChapters,
       alternative: infoTable["judul indonesia"] || "",
       released: infoTable["released"] || "",
@@ -705,6 +749,9 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     }
     status = wpData.status !== "Unknown" ? wpData.status : status;
     if (wpData.type) type = wpData.type;
+    // Override status with AniList (authoritative)
+    const aniStatus = await fetchAniListStatus(title);
+    if (aniStatus !== "Unknown") status = aniStatus;
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status, author, artist,
       genre: genres, rating: rating || undefined, chapters, released,
