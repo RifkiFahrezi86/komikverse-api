@@ -1,5 +1,17 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "./lib/db";
+
+let _query: any;
+
+async function loadDb() {
+  if (!_query) {
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
+    if (!url) throw new Error("Database not configured");
+    const sql = neon(url);
+    _query = (text: string, params: unknown[] = []) => sql(text, params);
+  }
+}
 
 // Pre-computed bcrypt hash of 'admin123' (cost 10) — no need to import bcryptjs
 const ADMIN_HASH = "$2b$10$VFfeR324ey/yLn/h/aK2EumR0wQJeDM6I96nclKRN2EgajssQf/DC";
@@ -10,6 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
+  await loadDb();
+
   // Require a secret to run migrations
   const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
   if (!MIGRATION_SECRET || body.secret !== MIGRATION_SECRET) {
@@ -18,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // Create tables
-    await query(`
+    await _query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(50) UNIQUE NOT NULL,
@@ -31,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
     `);
 
-    await query(`
+    await _query(`
       CREATE TABLE IF NOT EXISTS comments (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -46,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
     `);
 
-    await query(`
+    await _query(`
       CREATE TABLE IF NOT EXISTS ad_placements (
         id SERIAL PRIMARY KEY,
         slot_name VARCHAR(100) UNIQUE NOT NULL,
@@ -59,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
     `);
 
-    await query(`
+    await _query(`
       CREATE TABLE IF NOT EXISTS site_settings (
         key VARCHAR(100) PRIMARY KEY,
         value TEXT DEFAULT '',
@@ -68,10 +82,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `);
 
     // Create indexes
-    await query("CREATE INDEX IF NOT EXISTS idx_comments_comic ON comments(comic_slug)");
-    await query("CREATE INDEX IF NOT EXISTS idx_comments_user ON comments(user_id)");
-    await query("CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status)");
-    await query("CREATE INDEX IF NOT EXISTS idx_comments_created ON comments(created_at DESC)");
+    await _query("CREATE INDEX IF NOT EXISTS idx_comments_comic ON comments(comic_slug)");
+    await _query("CREATE INDEX IF NOT EXISTS idx_comments_user ON comments(user_id)");
+    await _query("CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status)");
+    await _query("CREATE INDEX IF NOT EXISTS idx_comments_created ON comments(created_at DESC)");
 
     // Seed ad placements
     const adSlots = [
@@ -84,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ["reader-between", "Antara Panel Reader", "reader"],
     ];
     for (const [slot, label, pos] of adSlots) {
-      await query(
+      await _query(
         "INSERT INTO ad_placements (slot_name, label, position) VALUES ($1, $2, $3) ON CONFLICT (slot_name) DO NOTHING",
         [slot, label, pos]
       );
@@ -99,14 +113,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ["reader_ads_interval", "10"],
     ];
     for (const [key, value] of settings) {
-      await query(
+      await _query(
         "INSERT INTO site_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING",
         [key, value]
       );
     }
 
     // Create default admin
-    await query(
+    await _query(
       "INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, 'admin') ON CONFLICT (username) DO NOTHING",
       ["admin", "admin@komikverse.com", ADMIN_HASH]
     );

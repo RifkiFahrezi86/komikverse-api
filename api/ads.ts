@@ -1,5 +1,17 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "./lib/db";
+
+let _query: any;
+
+async function loadDb() {
+  if (!_query) {
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
+    if (!url) throw new Error("Database not configured");
+    const sql = neon(url);
+    _query = (text: string, params: unknown[] = []) => sql(text, params);
+  }
+}
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
 
@@ -16,16 +28,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
+  await loadDb();
+
   try {
     // Check if ads are globally enabled
-    const settingsRows = await query("SELECT value FROM site_settings WHERE key = 'ads_enabled'");
+    const settingsRows = await _query("SELECT value FROM site_settings WHERE key = 'ads_enabled'");
     const adsEnabled = settingsRows.length > 0 && settingsRows[0].value === "true";
 
     if (!adsEnabled) {
       return res.status(200).json({ ads: {} });
     }
 
-    const rows = await query(
+    const rows = await _query(
       "SELECT slot_name, ad_code FROM ad_placements WHERE is_active = true AND ad_code != ''"
     );
 

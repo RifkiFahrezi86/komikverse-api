@@ -1,28 +1,37 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "./lib/db";
 
-let bcrypt: any;
-let jwt: any;
+// ALL imports are dynamic — zero static imports to avoid Vercel module crash
+let _query: any;
+let _bcrypt: any;
+let _jwt: any;
 
-async function loadDeps() {
-  if (!bcrypt) {
-    const b = await import("bcryptjs");
-    bcrypt = (b as any).default || b;
+async function loadAll() {
+  if (!_query) {
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const url =
+      process.env.POSTGRES_URL ||
+      process.env.DATABASE_URL ||
+      process.env.POSTGRES_URL_NON_POOLING ||
+      process.env.DATABASE_URL_UNPOOLED ||
+      process.env.POSTGRES_PRISMA_URL ||
+      "";
+    if (!url) throw new Error("Database not configured");
+    const sql = neon(url);
+    _query = (text: string, params: unknown[] = []) => sql(text, params);
   }
-  if (!jwt) {
+  if (!_bcrypt) {
+    const b = await import("bcryptjs");
+    _bcrypt = (b as any).default || b;
+  }
+  if (!_jwt) {
     const j = await import("jsonwebtoken");
-    jwt = (j as any).default || j;
+    _jwt = (j as any).default || j;
   }
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
-
-interface JwtPayload {
-  id: number;
-  username: string;
-  role: string;
-}
 
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || "";
@@ -36,25 +45,9 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
 }
 
-function createToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
-}
-
-function verifyToken(token: string): JwtPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
-  } catch {
-    return null;
-  }
-}
-
 function getTokenFromRequest(req: VercelRequest): string | null {
-  // Check Authorization header first
   const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    return authHeader.slice(7);
-  }
-  // Check cookie
+  if (authHeader?.startsWith("Bearer ")) return authHeader.slice(7);
   const cookies = req.headers.cookie || "";
   const match = cookies.match(/kv_token=([^;]+)/);
   return match ? match[1] : null;
@@ -64,7 +57,6 @@ function sanitize(str: string): string {
   return str.replace(/[<>"'&]/g, "").trim();
 }
 
-// Rate limiting for auth
 const authRateLimit = new Map<string, { count: number; resetAt: number }>();
 function isAuthRateLimited(ip: string): boolean {
   const now = Date.now();
@@ -74,33 +66,34 @@ function isAuthRateLimited(ip: string): boolean {
     return false;
   }
   entry.count++;
-  return entry.count > 10; // 10 auth attempts per minute
+  return entry.count > 10;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
-  setCors(req, res);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    setCors(req, res);
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+    if (req.method === "OPTIONS") return res.status(200).end();
 
-  await loadDeps();
+    await loadAll();
 
-  const ip = (typeof req.headers["x-forwarded-for"] === "string"
-    ? req.headers["x-forwarded-for"].split(",")[0].trim()
-    : "unknown");
+    const ip = (typeof req.headers["x-forwarded-for"] === "string"
+      ? req.headers["x-forwarded-for"].split(",")[0].trim()
+      : "unknown");
 
-  const path = (req.url || "").split("?")[0].replace(/^\/api\/auth\/?/, "");
-  const action = path.split("/")[0] || "";
+    const path = (req.url || "").split("?")[0].replace(/^\/api\/auth\/?/, "");
+    const action = path.split("/")[0] || "";
+
     // GET /api/auth/me
     if (req.method === "GET" && action === "me") {
       const token = getTokenFromRequest(req);
       if (!token) return res.status(401).json({ error: "Not authenticated" });
-      const payload = verifyToken(token);
-      if (!payload) return res.status(401).json({ error: "Invalid token" });
+      let payload: any;
+      try { payload = _jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: "Invalid token" }); }
 
-      const rows = await query(
+      const rows = await _query(
         "SELECT id, username, email, role, avatar_url, created_at FROM users WHERE id = $1",
         [payload.id]
       );
@@ -108,43 +101,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ user: rows[0] });
     }
 
-    // PATCH /api/auth/change-password (authenticated)
+    // PATCH /api/auth/change-password
     if (req.method === "PATCH" && action === "change-password") {
       const token = getTokenFromRequest(req);
       if (!token) return res.status(401).json({ error: "Not authenticated" });
-      const payload = verifyToken(token);
-      if (!payload) return res.status(401).json({ error: "Invalid token" });
+      let payload: any;
+      try { payload = _jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: "Invalid token" }); }
 
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
       const currentPassword = String(body.current_password || "");
       const newPassword = String(body.new_password || "");
 
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({ error: "Password lama dan baru diperlukan" });
-      }
-      if (newPassword.length < 6) {
-        return res.status(400).json({ error: "Password baru minimal 6 karakter" });
-      }
+      if (!currentPassword || !newPassword) return res.status(400).json({ error: "Password lama dan baru diperlukan" });
+      if (newPassword.length < 6) return res.status(400).json({ error: "Password baru minimal 6 karakter" });
 
-      const rows = await query("SELECT password_hash FROM users WHERE id = $1", [payload.id]);
+      const rows = await _query("SELECT password_hash FROM users WHERE id = $1", [payload.id]);
       if (rows.length === 0) return res.status(404).json({ error: "User not found" });
 
-      const valid = await bcrypt.compare(currentPassword, rows[0].password_hash);
+      const valid = await _bcrypt.compare(currentPassword, rows[0].password_hash);
       if (!valid) return res.status(401).json({ error: "Password lama salah" });
 
-      const newHash = await bcrypt.hash(newPassword, 10);
-      await query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [newHash, payload.id]);
-
+      const newHash = await _bcrypt.hash(newPassword, 10);
+      await _query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [newHash, payload.id]);
       return res.status(200).json({ success: true, message: "Password berhasil diubah" });
     }
 
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
-
-    if (isAuthRateLimited(ip)) {
-      return res.status(429).json({ error: "Too many attempts. Please wait." });
-    }
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    if (isAuthRateLimited(ip)) return res.status(429).json({ error: "Too many attempts. Please wait." });
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
@@ -154,37 +137,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const email = sanitize(String(body.email || "")).toLowerCase();
       const password = String(body.password || "");
 
-      if (!username || username.length < 3 || username.length > 30) {
-        return res.status(400).json({ error: "Username harus 3-30 karakter" });
-      }
-      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-        return res.status(400).json({ error: "Username hanya boleh huruf, angka, dan underscore" });
-      }
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({ error: "Email tidak valid" });
-      }
-      if (password.length < 6) {
-        return res.status(400).json({ error: "Password minimal 6 karakter" });
-      }
+      if (!username || username.length < 3 || username.length > 30) return res.status(400).json({ error: "Username harus 3-30 karakter" });
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) return res.status(400).json({ error: "Username hanya boleh huruf, angka, dan underscore" });
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Email tidak valid" });
+      if (password.length < 6) return res.status(400).json({ error: "Password minimal 6 karakter" });
 
-      // Check existing
-      const existing = await query(
-        "SELECT id FROM users WHERE username = $1 OR email = $2",
-        [username, email]
-      );
-      if (existing.length > 0) {
-        return res.status(409).json({ error: "Username atau email sudah digunakan" });
-      }
+      const existing = await _query("SELECT id FROM users WHERE username = $1 OR email = $2", [username, email]);
+      if (existing.length > 0) return res.status(409).json({ error: "Username atau email sudah digunakan" });
 
-      const passwordHash = await bcrypt.hash(password, 10);
-      const result = await query(
+      const passwordHash = await _bcrypt.hash(password, 10);
+      const result = await _query(
         "INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, 'user') RETURNING id, username, email, role, created_at",
         [username, email, passwordHash]
       );
 
       const user = result[0];
-      const token = createToken({ id: user.id, username: user.username, role: user.role });
-
+      const token = _jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
       res.setHeader("Set-Cookie", `kv_token=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
       return res.status(201).json({ user, token });
     }
@@ -194,27 +162,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const login = sanitize(String(body.username || body.email || ""));
       const password = String(body.password || "");
 
-      if (!login || !password) {
-        return res.status(400).json({ error: "Username/email dan password diperlukan" });
-      }
+      if (!login || !password) return res.status(400).json({ error: "Username/email dan password diperlukan" });
 
-      const rows = await query(
+      const rows = await _query(
         "SELECT id, username, email, password_hash, role, avatar_url, created_at FROM users WHERE username = $1 OR email = $1",
         [login.toLowerCase()]
       );
-      if (rows.length === 0) {
-        return res.status(401).json({ error: "Username atau password salah" });
-      }
+      if (rows.length === 0) return res.status(401).json({ error: "Username atau password salah" });
 
       const user = rows[0];
-      const valid = await bcrypt.compare(password, user.password_hash);
-      if (!valid) {
-        return res.status(401).json({ error: "Username atau password salah" });
-      }
+      const valid = await _bcrypt.compare(password, user.password_hash);
+      if (!valid) return res.status(401).json({ error: "Username atau password salah" });
 
-      const token = createToken({ id: user.id, username: user.username, role: user.role });
+      const token = _jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
       const { password_hash, ...safeUser } = user;
-
       res.setHeader("Set-Cookie", `kv_token=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
       return res.status(200).json({ user: safeUser, token });
     }
@@ -228,10 +189,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(404).json({ error: "Not found" });
   } catch (error: any) {
     console.error("Auth error:", error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Internal server error",
-      debug_message: error?.message || String(error),
-      debug_stack: error?.stack?.split("\n").slice(0, 5)
+      message: error?.message || String(error)
     });
   }
 }

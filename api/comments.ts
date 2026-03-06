@@ -1,12 +1,20 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "./lib/db";
 
-let jwt: any;
+let _query: any;
+let _jwt: any;
 
-async function loadDeps() {
-  if (!jwt) {
+async function loadAll() {
+  if (!_query) {
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
+    if (!url) throw new Error("Database not configured");
+    const sql = neon(url);
+    _query = (text: string, params: unknown[] = []) => sql(text, params);
+  }
+  if (!_jwt) {
     const j = await import("jsonwebtoken");
-    jwt = (j as any).default || j;
+    _jwt = (j as any).default || j;
   }
 }
 
@@ -38,9 +46,9 @@ function getUser(req: VercelRequest): JwtPayload | null {
     const cookies = req.headers.cookie || "";
     const match = cookies.match(/kv_token=([^;]+)/);
     if (!match) return null;
-    try { return jwt.verify(match[1], JWT_SECRET) as JwtPayload; } catch { return null; }
+    try { return _jwt.verify(match[1], JWT_SECRET) as JwtPayload; } catch { return null; }
   }
-  try { return jwt.verify(token, JWT_SECRET) as JwtPayload; } catch { return null; }
+  try { return _jwt.verify(token, JWT_SECRET) as JwtPayload; } catch { return null; }
 }
 
 function sanitizeComment(str: string): string {
@@ -52,6 +60,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
 
+  await loadAll();
+
   await loadDeps();
 
   try {
@@ -60,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const comicSlug = String(req.query.comic_slug || "");
       if (!comicSlug) return res.status(400).json({ error: "comic_slug required" });
 
-      const rows = await query(
+      const rows = await _query(
         `SELECT c.id, c.content, c.comic_slug, c.chapter_slug, c.parent_id, c.created_at,
                 u.id as user_id, u.username, u.avatar_url, u.role as user_role
          FROM comments c
@@ -121,11 +131,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Check if comment moderation is enabled
-      const settings = await query("SELECT value FROM site_settings WHERE key = 'comment_moderation'");
+      const settings = await _query("SELECT value FROM site_settings WHERE key = 'comment_moderation'");
       const moderation = settings.length > 0 && settings[0].value === "true";
       const status = moderation ? "pending" : "approved";
 
-      const result = await query(
+      const result = await _query(
         `INSERT INTO comments (user_id, comic_slug, comic_title, chapter_slug, content, parent_id, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, content, comic_slug, chapter_slug, parent_id, status, created_at`,
@@ -150,12 +160,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Users can delete own comments, admins can delete any
       if (user.role === "admin") {
-        await query("DELETE FROM comments WHERE id = $1", [id]);
+        await _query("DELETE FROM comments WHERE id = $1", [id]);
       } else {
-        const result = await query("DELETE FROM comments WHERE id = $1 AND user_id = $2", [id, user.id]);
+        const result = await _query("DELETE FROM comments WHERE id = $1 AND user_id = $2", [id, user.id]);
         if (result.length === 0) {
           // Check if it existed
-          const exists = await query("SELECT id FROM comments WHERE id = $1", [id]);
+          const exists = await _query("SELECT id FROM comments WHERE id = $1", [id]);
           if (exists.length > 0) return res.status(403).json({ error: "Tidak diizinkan" });
         }
       }
@@ -176,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: "Invalid id or status" });
       }
 
-      await query("UPDATE comments SET status = $1, updated_at = NOW() WHERE id = $2", [status, id]);
+      await _query("UPDATE comments SET status = $1, updated_at = NOW() WHERE id = $2", [status, id]);
       return res.status(200).json({ success: true });
     }
 

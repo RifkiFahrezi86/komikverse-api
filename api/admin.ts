@@ -1,17 +1,25 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "./lib/db";
 
-let jwt: any;
-let bcrypt: any;
+let _query: any;
+let _jwt: any;
+let _bcrypt: any;
 
-async function loadDeps() {
-  if (!jwt) {
-    const j = await import("jsonwebtoken");
-    jwt = (j as any).default || j;
+async function loadAll() {
+  if (!_query) {
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
+    if (!url) throw new Error("Database not configured");
+    const sql = neon(url);
+    _query = (text: string, params: unknown[] = []) => sql(text, params);
   }
-  if (!bcrypt) {
+  if (!_jwt) {
+    const j = await import("jsonwebtoken");
+    _jwt = (j as any).default || j;
+  }
+  if (!_bcrypt) {
     const b = await import("bcryptjs");
-    bcrypt = (b as any).default || b;
+    _bcrypt = (b as any).default || b;
   }
 }
 
@@ -36,7 +44,7 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Credentials", "true");
 }
 
-function getAdmin(req: VercelRequest): JwtPayload | null {
+function getAdmin(req: VercelRequest): any {
   const authHeader = req.headers.authorization;
   let token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   if (!token) {
@@ -46,7 +54,7 @@ function getAdmin(req: VercelRequest): JwtPayload | null {
   }
   if (!token) return null;
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const payload = _jwt.verify(token, JWT_SECRET) as any;
     return payload.role === "admin" ? payload : null;
   } catch { return null; }
 }
@@ -56,7 +64,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  await loadDeps();
+  try {
+  await loadAll();
 
   const admin = getAdmin(req);
   if (!admin) return res.status(403).json({ error: "Admin access required" });
@@ -64,17 +73,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
   const resource = path.split("/")[0] || "";
 
-  try {
     // ─── Stats ───
     if (resource === "stats" && req.method === "GET") {
       const [users, comments, pendingComments, activeAds] = await Promise.all([
-        query("SELECT COUNT(*) as count FROM users"),
-        query("SELECT COUNT(*) as count FROM comments"),
-        query("SELECT COUNT(*) as count FROM comments WHERE status = 'pending'"),
-        query("SELECT COUNT(*) as count FROM ad_placements WHERE is_active = true"),
+        _query("SELECT COUNT(*) as count FROM users"),
+        _query("SELECT COUNT(*) as count FROM comments"),
+        _query("SELECT COUNT(*) as count FROM comments WHERE status = 'pending'"),
+        _query("SELECT COUNT(*) as count FROM ad_placements WHERE is_active = true"),
       ]);
 
-      const recentComments = await query(
+      const recentComments = await _query(
         `SELECT c.id, c.content, c.comic_slug, c.comic_title, c.status, c.created_at,
                 u.username
          FROM comments c JOIN users u ON c.user_id = u.id
@@ -95,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ─── Users ───
     if (resource === "users") {
       if (req.method === "GET") {
-        const rows = await query(
+        const rows = await _query(
           "SELECT id, username, email, role, avatar_url, created_at FROM users ORDER BY created_at DESC"
         );
         return res.status(200).json({ users: rows });
@@ -111,14 +119,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (id === admin.id && role !== "admin") {
           return res.status(400).json({ error: "Cannot change your own role" });
         }
-        await query("UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2", [role, id]);
+        await _query("UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2", [role, id]);
         return res.status(200).json({ success: true });
       }
       if (req.method === "DELETE") {
         const id = parseInt(String(req.query.id));
         if (!id) return res.status(400).json({ error: "User id required" });
         if (id === admin.id) return res.status(400).json({ error: "Cannot delete yourself" });
-        await query("DELETE FROM users WHERE id = $1", [id]);
+        await _query("DELETE FROM users WHERE id = $1", [id]);
         return res.status(200).json({ success: true });
       }
       // PUT /api/admin/users/reset-password — Admin resets a user's password
@@ -128,8 +136,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const newPassword = String(body.new_password || "");
         if (!id) return res.status(400).json({ error: "User id required" });
         if (newPassword.length < 6) return res.status(400).json({ error: "Password minimal 6 karakter" });
-        const newHash = await bcrypt.hash(newPassword, 10);
-        await query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [newHash, id]);
+        const newHash = await _bcrypt.hash(newPassword, 10);
+        await _query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [newHash, id]);
         return res.status(200).json({ success: true, message: "Password berhasil direset" });
       }
     }
@@ -148,7 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           params.push(status);
         }
         sql += " ORDER BY c.created_at DESC LIMIT 200";
-        const rows = await query(sql, params);
+        const rows = await _query(sql, params);
         return res.status(200).json({ comments: rows });
       }
       if (req.method === "PATCH") {
@@ -158,13 +166,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!id || !["approved", "pending", "hidden"].includes(status)) {
           return res.status(400).json({ error: "Invalid" });
         }
-        await query("UPDATE comments SET status = $1, updated_at = NOW() WHERE id = $2", [status, id]);
+        await _query("UPDATE comments SET status = $1, updated_at = NOW() WHERE id = $2", [status, id]);
         return res.status(200).json({ success: true });
       }
       if (req.method === "DELETE") {
         const id = parseInt(String(req.query.id));
         if (!id) return res.status(400).json({ error: "Comment id required" });
-        await query("DELETE FROM comments WHERE id = $1", [id]);
+        await _query("DELETE FROM comments WHERE id = $1", [id]);
         return res.status(200).json({ success: true });
       }
     }
@@ -172,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ─── Ad Placements ───
     if (resource === "ads") {
       if (req.method === "GET") {
-        const rows = await query("SELECT * FROM ad_placements ORDER BY id");
+        const rows = await _query("SELECT * FROM ad_placements ORDER BY id");
         return res.status(200).json({ ads: rows });
       }
       if (req.method === "PUT") {
@@ -183,7 +191,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const adCode = String(body.ad_code ?? "");
         const isActive = Boolean(body.is_active);
 
-        await query(
+        await _query(
           "UPDATE ad_placements SET ad_code = $1, is_active = $2, updated_at = NOW() WHERE id = $3",
           [adCode, isActive, id]
         );
@@ -194,7 +202,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ─── Settings ───
     if (resource === "settings") {
       if (req.method === "GET") {
-        const rows = await query("SELECT key, value FROM site_settings");
+        const rows = await _query("SELECT key, value FROM site_settings");
         const settings: Record<string, string> = {};
         for (const row of rows) settings[row.key] = row.value;
         return res.status(200).json({ settings });
@@ -205,7 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         for (const [key, value] of entries) {
           const safeKey = key.replace(/[^a-z0-9_]/gi, "").slice(0, 100);
           const safeValue = String(value).slice(0, 5000);
-          await query(
+          await _query(
             "INSERT INTO site_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()",
             [safeKey, safeValue]
           );
