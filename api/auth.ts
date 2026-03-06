@@ -18,7 +18,7 @@ async function loadAll() {
       "";
     if (!url) throw new Error("Database not configured");
     const sql = neon(url);
-    _query = (text: string, params: unknown[] = []) => sql(text, params);
+    _query = (text: string, params: unknown[] = []) => sql.query(text, params);
   }
   if (!_bcrypt) {
     const b = await import("bcryptjs");

@@ -9,7 +9,7 @@ async function loadDb() {
     const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
     if (!url) throw new Error("Database not configured");
     const sql = neon(url);
-    _query = (text: string, params: unknown[] = []) => sql(text, params);
+    _query = (text: string, params: unknown[] = []) => sql.query(text, params);
   }
 }
 
