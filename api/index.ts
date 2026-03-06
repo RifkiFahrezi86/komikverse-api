@@ -398,7 +398,8 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     });
     const type = infoTable["jenis komik"] || "Manga";
     const author = infoTable["pengarang"] || "";
-    const status = infoTable["status"] || "Unknown";
+    const rawStatus = (infoTable["status"] || "").toLowerCase();
+    const status = rawStatus === "end" || rawStatus === "tamat" ? "Completed" : rawStatus === "ongoing" ? "Ongoing" : rawStatus === "hiatus" ? "Hiatus" : rawStatus || "Unknown";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const genres: any[] = [];
     $("a[href*='/genre/']").each((_, el) => {
