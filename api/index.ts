@@ -376,7 +376,7 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
   search: async (query) => {
     const keyword = query.keyword;
     if (!keyword) return apiError("Parameter 'keyword' diperlukan", 400);
-    const $ = await fetchHTML(`${KOMIKU_BASE}/pustaka/?keyword=${encodeURIComponent(keyword)}`);
+    const $ = await fetchHTML(`${KOMIKU_BASE}/?post_type=manga&s=${encodeURIComponent(keyword)}`);
     return apiResponse(komikuParseListPage($));
   },
 
