@@ -540,7 +540,7 @@ async function kiryuuResolveTypes(comics: any[]): Promise<any[]> {
   const slugs = missing.map(c => c._slug).filter(Boolean);
   if (slugs.length === 0) return comics;
   try {
-    const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slugs.join(",")}&_fields=slug,_embedded&_embed=wp:term&per_page=${slugs.length}`;
+    const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slugs.join(",")}&_embed=wp:term&per_page=${slugs.length}`;
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
     });
@@ -565,9 +565,8 @@ async function kiryuuResolveTypes(comics: any[]): Promise<any[]> {
       }
     }
   } catch { /* fallback to existing types */ }
-  // Default remaining unknowns to Manga and clean up
+  // Clean up internal slug field
   for (const c of comics) {
-    if (!c.type) c.type = "Manga";
     delete c._slug;
   }
   return comics;
@@ -670,7 +669,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     // Chapter list from admin-ajax
     const chapterPromise = mangaIdMatch ? fetchHTML(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaIdMatch[1]}&page=1&action=chapter_list`).catch(() => null) : Promise.resolve(null);
     // Status and type from WP REST API (detail page doesn't have status, type can be wrong)
-    const wpPromise = fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slug}&_fields=_embedded&_embed=wp:term`, {
+    const wpPromise = fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slug}&_embed=wp:term`, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
     }).then(r => r.ok ? r.json() : []).then(data => {
       const result = { status: "Unknown", type: "" };
