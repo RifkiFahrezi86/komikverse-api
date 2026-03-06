@@ -3,6 +3,11 @@
   "outputDirectory": "",
   "framework": null,
   "rewrites": [
+    { "source": "/api/auth/:path*", "destination": "/api/auth" },
+    { "source": "/api/comments", "destination": "/api/comments" },
+    { "source": "/api/admin/:path*", "destination": "/api/admin" },
+    { "source": "/api/ads", "destination": "/api/ads" },
+    { "source": "/api/migrate", "destination": "/api/migrate" },
     { "source": "/api/:path*", "destination": "/api" }
   ],
   "headers": [
