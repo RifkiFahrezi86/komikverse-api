@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "./lib/db";
-import bcrypt from "bcryptjs";
+import * as bcryptLib from "bcryptjs";
+
+// Handle both ESM default and named exports
+const bcrypt = (bcryptLib as any).default || bcryptLib;
 
 const MIGRATION_SECRET = process.env.MIGRATION_SECRET || process.env.JWT_SECRET || "";
 

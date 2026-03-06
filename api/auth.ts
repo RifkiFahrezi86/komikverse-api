@@ -1,7 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { query } from "./lib/db";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import * as bcryptLib from "bcryptjs";
+import * as jwtLib from "jsonwebtoken";
+
+const bcrypt = (bcryptLib as any).default || bcryptLib;
+const jwt = (jwtLib as any).default || jwtLib;
 
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
