@@ -691,11 +691,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const urlPath = (req.url || "/").split("?")[0].replace(/^\/api\/?/, "");
   const routeName = urlPath.split("/").filter(Boolean)[0] || "health";
 
-  // Token validation (skip for health endpoint — needed for dashboard ping)
-  if (routeName !== "health" && !isValidToken(req)) {
-    return res.status(403).json(apiError("Forbidden", 403));
-  }
-
   try {
     // Parse path
     const url = req.url || "/";
