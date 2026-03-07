@@ -199,6 +199,117 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // ─── Seed Data ───
+    if (resource === "seed" && req.method === "POST") {
+      const FIRST_NAMES = [
+        "Andi","Budi","Citra","Dewi","Eko","Fitri","Gilang","Hana","Irfan","Joni",
+        "Kiki","Lina","Maya","Nanda","Oscar","Putra","Rina","Sari","Toni","Umi",
+        "Vina","Wawan","Yudi","Zahra","Adi","Bayu","Dimas","Fajar","Galih","Hendra",
+        "Indra","Joko","Kartika","Lukman","Mira","Nisa","Putri","Ratna","Sinta","Tika",
+        "Agus","Bambang","Chandra","Dian","Eka","Feri","Gunawan","Heri","Ivan","Jihan"
+      ];
+      const LAST_NAMES = [
+        "Pratama","Saputra","Wijaya","Kusuma","Hidayat","Nugraha","Permana","Sanjaya",
+        "Putra","Setiawan","Utama","Lestari","Wicaksono","Budiman","Hartono","Prabowo",
+        "Santoso","Suryadi","Firmansyah","Ramadhan"
+      ];
+      const COMMENTS_POOL = [
+        "Mantap banget chapter ini! 🔥","Gak sabar nunggu lanjutannya","Artwork-nya makin keren aja",
+        "Ceritanya makin seru! Plot twist nya gila","Karakter utamanya makin badass 💪","Update terus min!",
+        "Ini manhwa/manga terbaik sih","Baru baca langsung ketagihan","Nunggu update tiap hari",
+        "MC nya OP banget wkwk","Alur ceritanya unpredictable","Suka banget sama art style nya",
+        "Chapter ini bikin penasaran","Semoga ada season 2","Rating 10/10 dari gue 👍",
+        "Baru mulai baca, langsung marathon","Ceritanya deep banget","Recommended buat yg suka genre ini",
+        "Auto favorit deh ini mah","Kapan update lagi min?","Ngakak baca chapter ini 😂",
+        "Sedih banget pas scene itu 😢","Worth read pokoknya","Top tier manhwa/manga sih ini",
+        "Salah satu yg terbaik yg pernah gue baca","Penasaran sama ending nya",
+        "Gak nyesel baca dari awal","Artwork level dewa 🎨","Semakin klimaks aja ceritanya",
+        "Ini hidden gem banget","Underrated parah sih ini","Wajib baca!",
+        "Lanjut terus min jangan discontinue","Plot nya well-written banget","Best character development",
+        "Makin ke sini makin seru","Guilty pleasure gue nih 😅","Binge read 50 chapter sekaligus",
+        "The art is insane!","Love the story progression","Keren abis!!! 🤩",
+      ];
+      const COMIC_DATA = [
+        { slug: "solo-leveling", title: "Solo Leveling" },
+        { slug: "one-piece", title: "One Piece" },
+        { slug: "tower-of-god", title: "Tower of God" },
+        { slug: "the-beginning-after-the-end", title: "The Beginning After The End" },
+        { slug: "omniscient-reader", title: "Omniscient Reader's Viewpoint" },
+        { slug: "martial-peak", title: "Martial Peak" },
+        { slug: "return-of-the-mount-hua-sect", title: "Return of the Mount Hua Sect" },
+        { slug: "nano-machine", title: "Nano Machine" },
+        { slug: "eleceed", title: "Eleceed" },
+        { slug: "windbreaker", title: "Windbreaker" },
+        { slug: "legend-of-the-northern-blade", title: "Legend of the Northern Blade" },
+        { slug: "the-great-mage-returns", title: "The Great Mage Returns After 4000 Years" },
+        { slug: "overgeared", title: "Overgeared" },
+        { slug: "doom-breaker", title: "Doom Breaker" },
+        { slug: "teenage-mercenary", title: "Teenage Mercenary" },
+      ];
+
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+      const userCount = Math.min(Math.max(parseInt(body.userCount) || 20, 5), 50);
+      const commentCount = Math.min(Math.max(parseInt(body.commentCount) || 60, 10), 200);
+
+      const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+      // Create fake users
+      const createdUserIds: number[] = [];
+      const fakeHash = await _bcrypt.hash("fakeuser123", 10);
+      for (let i = 0; i < userCount; i++) {
+        const fn = pick(FIRST_NAMES);
+        const ln = pick(LAST_NAMES);
+        const suffix = Math.floor(Math.random() * 999);
+        const username = `${fn.toLowerCase()}${ln.toLowerCase()}${suffix}`;
+        const email = `${username}@gmail.com`;
+        const daysAgo = Math.floor(Math.random() * 180) + 30;
+        const createdAt = new Date(Date.now() - daysAgo * 86400000).toISOString();
+        try {
+          const rows = await _query(
+            `INSERT INTO users (username, email, password_hash, role, created_at) 
+             VALUES ($1, $2, $3, 'user', $4) 
+             ON CONFLICT (username) DO NOTHING 
+             RETURNING id`,
+            [username, email, fakeHash, createdAt]
+          );
+          if (rows.length > 0) createdUserIds.push(rows[0].id);
+        } catch { /* skip duplicates */ }
+      }
+
+      // Also get existing non-admin users
+      const existingUsers = await _query("SELECT id FROM users WHERE role = 'user' LIMIT 50");
+      const allUserIds = [...new Set([...createdUserIds, ...existingUsers.map((u: any) => u.id)])];
+      if (allUserIds.length === 0) {
+        return res.status(400).json({ error: "No users available for seeding comments" });
+      }
+
+      // Create fake comments spread over time
+      let insertedComments = 0;
+      for (let i = 0; i < commentCount; i++) {
+        const userId = pick(allUserIds);
+        const comic = pick(COMIC_DATA);
+        const content = pick(COMMENTS_POOL);
+        const daysAgo = Math.floor(Math.random() * 150);
+        const hoursAgo = Math.floor(Math.random() * 24);
+        const createdAt = new Date(Date.now() - daysAgo * 86400000 - hoursAgo * 3600000).toISOString();
+        const status = Math.random() < 0.85 ? "approved" : "pending";
+        try {
+          await _query(
+            `INSERT INTO comments (user_id, comic_slug, comic_title, content, status, created_at) 
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, comic.slug, comic.title, content, status, createdAt]
+          );
+          insertedComments++;
+        } catch { /* skip errors */ }
+      }
+
+      return res.status(200).json({
+        success: true,
+        users_created: createdUserIds.length,
+        comments_created: insertedComments,
+      });
+    }
+
     // ─── Settings ───
     if (resource === "settings") {
       if (req.method === "GET") {
