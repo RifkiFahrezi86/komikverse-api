@@ -3,13 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "dev:api": "tsx watch src/server/index.ts",
-    "dev:web": "vite",
-    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview"
-  },
+  "scripts": {},
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
     "axios": "^1.13.6",

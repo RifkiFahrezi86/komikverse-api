@@ -125,6 +125,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ["admin", "admin@komikverse.com", ADMIN_HASH]
     );
 
+    // Add is_seed columns if not exist
+    await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
+    await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
+
     return res.status(200).json({ success: true, message: "Migration completed successfully" });
   } catch (error) {
     console.error("Migration error:", error);
