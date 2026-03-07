@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KomikVerse API</title>
+  <meta name="description" content="KomikVerse REST API - Backend untuk platform baca manga, manhwa, dan manhua.">
+  <meta name="robots" content="noindex, nofollow">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a12;color:#e0e0e8;overflow:hidden}
+    .bg{position:fixed;inset:0;z-index:0}
+    .bg::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 30% 20%,rgba(249,115,22,.06) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(99,102,241,.04) 0%,transparent 60%);animation:drift 20s ease-in-out infinite alternate}
+    @keyframes drift{0%{transform:translate(0,0)}100%{transform:translate(-3%,2%)}}
+    .card{position:relative;z-index:1;max-width:520px;width:90%;padding:2.5rem;border-radius:20px;background:rgba(18,18,26,.85);border:1px solid rgba(255,255,255,.04);backdrop-filter:blur(20px);box-shadow:0 25px 60px rgba(0,0,0,.4)}
+    .logo{display:flex;align-items:center;gap:.6rem;margin-bottom:1.5rem}
+    .logo-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#f97316,#ea580c);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff}
+    .logo-text{font-size:1.3rem;font-weight:700;color:#fff}
+    .logo-text span{color:#f97316}
+    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;background:rgba(16,185,129,.1);color:#34d399;border:1px solid rgba(16,185,129,.15);margin-bottom:1.2rem}
+    .desc{font-size:.9rem;color:#8e8ea0;line-height:1.6;margin-bottom:1.8rem}
+    .endpoints{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.8rem}
+    .ep{display:flex;align-items:center;gap:.6rem;padding:.55rem .8rem;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);transition:all .2s}
+    .ep:hover{background:rgba(249,115,22,.04);border-color:rgba(249,115,22,.1)}
+    .method{font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:5px;min-width:36px;text-align:center;text-transform:uppercase;letter-spacing:.5px}
+    .get{background:rgba(16,185,129,.12);color:#34d399}
+    .post{background:rgba(59,130,246,.12);color:#60a5fa}
+    .ep-path{font-size:.78rem;font-family:'SF Mono',Menlo,Consolas,monospace;color:#c0c0d0}
+    .ep-desc{font-size:.7rem;color:#5c5c6e;margin-left:auto}
+    .footer{display:flex;align-items:center;justify-content:space-between;padding-top:1.2rem;border-top:1px solid rgba(255,255,255,.04)}
+    .footer a{font-size:.78rem;color:#f97316;text-decoration:none;font-weight:500;transition:opacity .2s}
+    .footer a:hover{opacity:.8}
+    .ver{font-size:.65rem;color:#3c3c4e}
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon">K</div>
+      <div class="logo-text">Komik<span>Verse</span> API</div>
+    </div>
+    <div class="badge">&#9679; Online</div>
+    <p class="desc">REST API backend untuk platform KomikVerse. Menyediakan data manga, manhwa, dan manhua dari berbagai sumber.</p>
+    <div class="endpoints">
+      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/popular</span><span class="ep-desc">Komik populer</span></div>
+      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/latest</span><span class="ep-desc">Update terbaru</span></div>
+      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/search/:q</span><span class="ep-desc">Cari komik</span></div>
+      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/detail/:slug</span><span class="ep-desc">Detail komik</span></div>
+      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/comments</span><span class="ep-desc">Komentar</span></div>
+      <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/login</span><span class="ep-desc">Autentikasi</span></div>
+    </div>
+    <div class="footer">
+      <a href="https://komikverse-swart.vercel.app" target="_blank" rel="noopener">&#8592; Kembali ke Situs</a>
+      <span class="ver">v1.0.0</span>
+    </div>
+  </div>
+</body>
+</html>
