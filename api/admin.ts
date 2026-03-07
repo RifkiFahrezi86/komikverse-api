@@ -303,6 +303,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // ─── Seed Cleanup (DELETE /api/admin/seed) ───
+    if (resource === "seed" && req.method === "DELETE") {
+      // Delete all comments from old hardcoded slugs
+      const OLD_SLUGS = [
+        "solo-leveling","one-piece","tower-of-god","the-beginning-after-the-end",
+        "omniscient-reader","martial-peak","return-of-the-mount-hua-sect","nano-machine",
+        "eleceed","windbreaker","legend-of-the-northern-blade","the-great-mage-returns",
+        "overgeared","doom-breaker","teenage-mercenary","komik-sample"
+      ];
+      const placeholders = OLD_SLUGS.map((_, i) => `$${i + 1}`).join(",");
+      const delComments = await _query(
+        `DELETE FROM comments WHERE comic_slug IN (${placeholders}) RETURNING id`,
+        OLD_SLUGS
+      );
+
+      // Delete orphaned fake users (non-admin users with no comments remaining)
+      const delUsers = await _query(
+        `DELETE FROM users WHERE role = 'user' AND id NOT IN (SELECT DISTINCT user_id FROM comments) RETURNING id`
+      );
+
+      return res.status(200).json({
+        success: true,
+        comments_deleted: delComments.length,
+        users_deleted: delUsers.length,
+      });
+    }
+
     // ─── Settings ───
     if (resource === "settings") {
       if (req.method === "GET") {
