@@ -1,6 +1,6 @@
 {
   "buildCommand": "",
-  "outputDirectory": "",
+  "outputDirectory": "public",
   "framework": null,
   "functions": {
     "api/**/*.ts": {
