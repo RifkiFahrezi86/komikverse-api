@@ -147,36 +147,53 @@ const FAKE_COMMENTS = [
   "Kerenn banget fight scene chapter ini!!", "Sumpah antagonisnya well-written banget",
 ];
 
-const COMIC_SLUGS = [
-  "solo-leveling", "one-piece", "tower-of-god", "the-beginning-after-the-end",
-  "omniscient-reader", "return-of-the-blossoming-blade", "nano-machine",
-  "legend-of-the-northern-blade", "teenage-mercenary", "doom-breaker",
-  "reaper-of-the-drifting-moon", "return-to-player", "mercenary-enrollment",
-  "eleceed", "windbreaker", "study-group", "weak-hero", "lookism",
-  "god-of-blackfield", "max-level-hero-returned", "overgeared",
-  "the-great-mage-returns-after-4000-years", "martial-peak", "apotheosis",
-  "tales-of-demons-and-gods", "star-martial-god-technique", "magic-emperor",
-  "volcanic-age", "chronicles-of-heavenly-demon", "medical-return",
-];
+const COMIC_SLUGS: string[] = [];
+const COMIC_TITLES: Record<string, string> = {};
 
-const COMIC_TITLES: Record<string, string> = {
-  "solo-leveling": "Solo Leveling", "one-piece": "One Piece",
-  "tower-of-god": "Tower of God", "the-beginning-after-the-end": "The Beginning After The End",
-  "omniscient-reader": "Omniscient Reader's Viewpoint", "return-of-the-blossoming-blade": "Return of the Blossoming Blade",
-  "nano-machine": "Nano Machine", "legend-of-the-northern-blade": "Legend of the Northern Blade",
-  "teenage-mercenary": "Teenage Mercenary", "doom-breaker": "Doom Breaker",
-  "reaper-of-the-drifting-moon": "Reaper of the Drifting Moon", "return-to-player": "Return to Player",
-  "mercenary-enrollment": "Mercenary Enrollment", "eleceed": "Eleceed",
-  "windbreaker": "Windbreaker", "study-group": "Study Group", "weak-hero": "Weak Hero",
-  "lookism": "Lookism", "god-of-blackfield": "God of Blackfield",
-  "max-level-hero-returned": "Max Level Hero Has Returned", "overgeared": "Overgeared",
-  "the-great-mage-returns-after-4000-years": "The Great Mage Returns After 4000 Years",
-  "martial-peak": "Martial Peak", "apotheosis": "Apotheosis",
-  "tales-of-demons-and-gods": "Tales of Demons and Gods",
-  "star-martial-god-technique": "Star Martial God Technique", "magic-emperor": "Magic Emperor",
-  "volcanic-age": "Volcanic Age", "chronicles-of-heavenly-demon": "Chronicles of Heavenly Demon",
-  "medical-return": "Medical Return",
-};
+// Fetch real manga slugs from Shinigami API
+async function loadRealComicSlugs() {
+  if (COMIC_SLUGS.length > 0) return;
+  try {
+    const { request } = await import("undici");
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      Accept: "application/json",
+      Origin: "https://09.shinigami.asia",
+      Referer: "https://09.shinigami.asia/",
+    };
+    // Fetch popular/recommended + top manga in parallel to get 30+ real slugs
+    const [recRes, topRes] = await Promise.all([
+      request("https://api.shngm.io/v1/manga/list?page=1&page_size=20&sort=latest&sort_order=desc&is_recommended=true", { headers }).catch(() => null),
+      request("https://api.shngm.io/v1/manga/top?page=1&page_size=20", { headers }).catch(() => null),
+    ]);
+    const seen = new Set<string>();
+    for (const resp of [recRes, topRes]) {
+      if (!resp) continue;
+      try {
+        const text = await resp.body.text();
+        const data = JSON.parse(text);
+        const list = data?.data || data?.manga_list || data || [];
+        const items = Array.isArray(list) ? list : [];
+        for (const m of items) {
+          const id = m.manga_id || m.id || m.slug;
+          const title = m.title || m.name || "";
+          if (id && !seen.has(String(id))) {
+            seen.add(String(id));
+            COMIC_SLUGS.push(String(id));
+            COMIC_TITLES[String(id)] = String(title);
+          }
+        }
+      } catch { /* skip parse errors */ }
+    }
+  } catch { /* fetch failed, will use fallback */ }
+  // Fallback if API returned nothing
+  if (COMIC_SLUGS.length === 0) {
+    COMIC_SLUGS.push("solo-leveling", "one-piece", "tower-of-god");
+    COMIC_TITLES["solo-leveling"] = "Solo Leveling";
+    COMIC_TITLES["one-piece"] = "One Piece";
+    COMIC_TITLES["tower-of-god"] = "Tower of God";
+  }
+}
 
 function pickRandom<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -401,6 +418,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Batch INSERT comments (25 per query instead of 120 individual queries)
+        // First, fetch REAL comic slugs from Shinigami API
+        await loadRealComicSlugs();
         let commentsCreated = 0;
         const pool = createdUserIds.length > 0 ? createdUserIds : [admin.id];
         for (let b = 0; b < commentCount; b += BATCH) {
