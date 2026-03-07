@@ -330,6 +330,8 @@ const shinigamiHandlers: Record<string, (query: any, slug?: string) => Promise<a
     // Override status with AniList (authoritative)
     const aniStatus = await fetchAniListStatus(comic.title);
     if (aniStatus !== "Unknown") comic.status = aniStatus;
+    // Cross-provider chapter merge: fill missing early chapters from other providers
+    comic.chapters = await mergeChaptersFromOtherProviders(comic.chapters, comic.title, "shinigami");
     return apiResponse(comic);
   },
 
@@ -472,9 +474,11 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     // Override status with AniList (authoritative)
     const aniStatus = await fetchAniListStatus(title);
     const finalStatus = aniStatus !== "Unknown" ? aniStatus : (status === "End" || status === "Tamat" ? "Completed" : status);
+    // Cross-provider chapter merge: fill missing early chapters from other providers
+    const mergedChapters = await mergeChaptersFromOtherProviders(uniqueChapters, title, "komiku");
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status: finalStatus, author,
-      genre: uniqueGenres, chapters: uniqueChapters,
+      genre: uniqueGenres, chapters: mergedChapters,
       alternative: infoTable["judul indonesia"] || "",
       released: infoTable["released"] || "",
     });
@@ -752,9 +756,11 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     // Override status with AniList (authoritative)
     const aniStatus = await fetchAniListStatus(title);
     if (aniStatus !== "Unknown") status = aniStatus;
+    // Cross-provider chapter merge: fill missing early chapters from other providers
+    const mergedChapters = await mergeChaptersFromOtherProviders(chapters, title, "kiryuu");
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status, author, artist,
-      genre: genres, rating: rating || undefined, chapters, released,
+      genre: genres, rating: rating || undefined, chapters: mergedChapters, released,
     });
   },
 
@@ -869,6 +875,183 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
 
   health: async () => ({ status: "ok", provider: "kiryuu", timestamp: new Date().toISOString() }),
 };
+
+// ─── Cross-Provider Chapter Merge ───
+// If a provider has incomplete chapters (e.g., starts at ch.100), try other providers to fill gaps
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function mergeChaptersFromOtherProviders(
+  primaryChapters: any[],
+  comicTitle: string,
+  currentProvider: string
+): Promise<any[]> {
+  if (!comicTitle || primaryChapters.length === 0) return primaryChapters;
+
+  // Tag primary chapters with their provider
+  primaryChapters.forEach(ch => { if (!ch.provider) ch.provider = currentProvider; });
+
+  // Check if chapters are incomplete: lowest number > 1
+  const numbers = primaryChapters.map(c => c.number).filter((n: number) => typeof n === "number" && !isNaN(n));
+  if (numbers.length === 0) return primaryChapters;
+  const minChapter = Math.min(...numbers);
+  // Only trigger fallback if missing significant early chapters (min > 3)
+  if (minChapter <= 3) return primaryChapters;
+
+  const otherProviders = ["shinigami", "komiku", "kiryuu"].filter(p => p !== currentProvider);
+  const existingNumbers = new Set(numbers);
+
+  for (const fallbackProvider of otherProviders) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let fallbackChapters: any[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let fallbackSlug: string | undefined;
+
+      if (fallbackProvider === "komiku") {
+        // Search by title on Komiku
+        const $ = await fetchHTML(`${KOMIKU_API}/?post_type=manga&s=${encodeURIComponent(comicTitle)}`);
+        const results = komikuParseListPage($);
+        if (!results.length) continue;
+        // Find best match by title similarity
+        const match = findBestTitleMatch(results, comicTitle);
+        if (!match) continue;
+        fallbackSlug = match.href.replace(/^\/manga\//, "").replace(/\/$/, "");
+        // Fetch detail to get chapter list
+        const detail$ = await fetchHTML(`${KOMIKU_BASE}/manga/${fallbackSlug}/`);
+        detail$("#daftarChapter a, a").each((_, el) => {
+          const chHref = detail$(el).attr("href") || "";
+          const chMatch = chHref.match(/\/([a-z0-9][a-z0-9-]+-chapter-[\d]+(?:-\d+)?)\/??$/i);
+          if (chMatch) {
+            const chSlug = chMatch[1];
+            const numMatch = chSlug.match(/-chapter-(\d+)(?:-(\d+))?$/);
+            const chNum = numMatch ? parseFloat(`${numMatch[1]}${numMatch[2] ? "." + numMatch[2] : ""}`) : undefined;
+            const text = detail$(el).text().trim();
+            fallbackChapters.push({
+              title: text.includes("Chapter") ? text : `Chapter ${chNum || ""}`,
+              href: `/chapter/${chSlug}`,
+              number: chNum,
+              provider: "komiku",
+            });
+          }
+        });
+        fallbackChapters = [...new Map(fallbackChapters.map(c => [c.href, c])).values()];
+      } else if (fallbackProvider === "kiryuu") {
+        // Search by title on Kiryuu via WP REST API
+        const searchRes = await fetch(
+          `${KIRYUU_BASE}/wp-json/wp/v2/manga?search=${encodeURIComponent(comicTitle)}&per_page=5&_fields=slug,title`,
+          { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } }
+        );
+        if (!searchRes.ok) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const searchData: any[] = await searchRes.json();
+        if (!searchData.length) continue;
+        const match = findBestTitleMatch(
+          searchData.map(d => ({ title: d.title?.rendered || d.title || "", href: d.slug })),
+          comicTitle
+        );
+        if (!match) continue;
+        fallbackSlug = match.href;
+        const detail$ = await fetchHTML(`${KIRYUU_BASE}/manga/${fallbackSlug}/`);
+        const mangaIdMatch = detail$.html().match(/manga_id=(\d+)/);
+        if (mangaIdMatch) {
+          const ch$ = await fetchHTML(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaIdMatch[1]}&page=1&action=chapter_list`).catch(() => null);
+          if (ch$) {
+            ch$("div[data-chapter-number]").each((_, el) => {
+              const $ch = ch$(el);
+              const chNum = $ch.attr("data-chapter-number") || "";
+              const chLink = $ch.find("a").first();
+              const chHref = chLink.attr("href") || "";
+              const chTitle = $ch.find("span").first().text().trim() || `Chapter ${chNum}`;
+              const chDate = $ch.find("time").attr("datetime") || "";
+              if (!chHref) return;
+              const path = chHref.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+              const parts = path.split("/");
+              if (parts.length < 2) return;
+              const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
+              fallbackChapters.push({
+                title: chTitle, href: `/chapter/${encoded}`,
+                date: chDate || undefined,
+                number: chNum ? parseFloat(chNum) : undefined,
+                provider: "kiryuu",
+              });
+            });
+          }
+        }
+      } else if (fallbackProvider === "shinigami") {
+        // Search by title on Shinigami
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result: any = await getMangaList({ page: 1, page_size: 10, sort: "latest", sort_order: "desc", q: comicTitle });
+        if (result.retcode !== 0 || !result.data?.length) continue;
+        const match = findBestTitleMatch(
+          result.data.map((d: any) => ({ title: d.title || "", href: d.manga_id || "" })),
+          comicTitle
+        );
+        if (!match) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const chResult: any = await getChapterList(match.href);
+        if (chResult.retcode === 0 && chResult.data?.length) {
+          fallbackChapters = transformChapters(chResult.data).map((ch: any) => ({ ...ch, provider: "shinigami" }));
+        }
+      }
+
+      if (fallbackChapters.length === 0) continue;
+
+      // Merge: add chapters from fallback that don't exist in primary
+      const fallbackNumbers = fallbackChapters.filter(c => typeof c.number === "number");
+      const fallbackMin = fallbackNumbers.length ? Math.min(...fallbackNumbers.map(c => c.number)) : Infinity;
+
+      // Only merge if fallback actually has earlier chapters
+      if (fallbackMin >= minChapter) continue;
+
+      let merged = false;
+      for (const fch of fallbackChapters) {
+        if (typeof fch.number === "number" && !existingNumbers.has(fch.number)) {
+          primaryChapters.push(fch);
+          existingNumbers.add(fch.number);
+          merged = true;
+        }
+      }
+
+      if (merged) {
+        // Re-sort desc by chapter number
+        primaryChapters.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
+        // If we filled the gap sufficiently, stop trying other providers
+        const newMin = Math.min(...primaryChapters.map(c => c.number).filter((n: number) => typeof n === "number"));
+        if (newMin <= 3) break;
+      }
+    } catch {
+      // Silently skip failing fallback providers
+      continue;
+    }
+  }
+
+  return primaryChapters;
+}
+
+// Find best title match from search results using normalized comparison
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findBestTitleMatch(results: any[], targetTitle: string): any | null {
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const target = normalize(targetTitle);
+  // First try exact match
+  for (const r of results) {
+    const title = typeof r.title === "object" ? (r.title.rendered || "") : (r.title || "");
+    if (normalize(title) === target) return r;
+  }
+  // Then try "contains" match
+  for (const r of results) {
+    const title = typeof r.title === "object" ? (r.title.rendered || "") : (r.title || "");
+    const n = normalize(title);
+    if (n.includes(target) || target.includes(n)) return r;
+  }
+  // Check first result if there's at least 60% overlap
+  if (results.length > 0) {
+    const title = typeof results[0].title === "object" ? (results[0].title.rendered || "") : (results[0].title || "");
+    const n = normalize(title);
+    const overlap = [...target].filter(c => n.includes(c)).length / Math.max(target.length, 1);
+    if (overlap > 0.6) return results[0];
+  }
+  return null;
+}
 
 // ─── Provider Routing ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
