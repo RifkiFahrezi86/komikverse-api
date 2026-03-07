@@ -3,125 +3,182 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KomikVerse API</title>
-  <meta name="description" content="KomikVerse REST API - Backend untuk platform baca manga, manhwa, dan manhua.">
+  <title>KomikVerse API Dashboard</title>
+  <meta name="description" content="KomikVerse REST API Dashboard - Monitoring & Documentation">
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    :root{--bg:#06060e;--surface:#0d0d18;--card:#111120;--border:rgba(255,255,255,.06);--border-hover:rgba(249,115,22,.2);--text:#e8e8f0;--text-secondary:#8888a0;--text-muted:#55556a;--orange:#f97316;--orange-dim:rgba(249,115,22,.1);--green:#34d399;--green-dim:rgba(16,185,129,.1);--blue:#60a5fa;--blue-dim:rgba(59,130,246,.1);--purple:#a78bfa;--purple-dim:rgba(167,139,250,.1);--red:#f87171;--red-dim:rgba(248,113,113,.1);--yellow:#fbbf24;--yellow-dim:rgba(251,191,36,.1);--mono:'JetBrains Mono',Consolas,monospace;--sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+    :root{--bg:#06060e;--surface:#0c0c18;--card:#10101f;--card-hover:#14142a;--border:rgba(255,255,255,.06);--border-hover:rgba(249,115,22,.25);--text:#e8e8f0;--text-sec:#8888a0;--text-dim:#55556a;--orange:#f97316;--orange-glow:rgba(249,115,22,.15);--green:#34d399;--green-glow:rgba(16,185,129,.12);--blue:#60a5fa;--blue-glow:rgba(59,130,246,.12);--purple:#a78bfa;--purple-glow:rgba(167,139,250,.12);--red:#f87171;--red-glow:rgba(248,113,113,.12);--yellow:#fbbf24;--yellow-glow:rgba(251,191,36,.12);--cyan:#22d3ee;--cyan-glow:rgba(34,211,238,.12);--mono:'JetBrains Mono',Consolas,monospace;--sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
     *{margin:0;padding:0;box-sizing:border-box}
     html{scroll-behavior:smooth}
     body{min-height:100vh;font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}
+    ::selection{background:rgba(249,115,22,.3);color:#fff}
 
-    /* Background */
     .bg-grid{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
-    .bg-grid::before{content:'';position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.03) 1px,transparent 1px);background-size:32px 32px}
-    .bg-grid::after{content:'';position:absolute;top:-30%;left:-20%;width:150%;height:150%;background:radial-gradient(ellipse at 20% 10%,rgba(249,115,22,.04) 0%,transparent 55%),radial-gradient(ellipse at 80% 90%,rgba(99,102,241,.03) 0%,transparent 55%);animation:drift 25s ease-in-out infinite alternate}
-    @keyframes drift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(-2%,1%) scale(1.02)}}
+    .bg-grid::before{content:'';position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.025) 1px,transparent 1px);background-size:28px 28px}
+    .bg-grid::after{content:'';position:absolute;top:-30%;left:-20%;width:150%;height:150%;background:radial-gradient(ellipse at 15% 5%,rgba(249,115,22,.035) 0%,transparent 50%),radial-gradient(ellipse at 85% 95%,rgba(99,102,241,.025) 0%,transparent 50%);animation:drift 30s ease-in-out infinite alternate}
+    @keyframes drift{0%{transform:translate(0,0)}100%{transform:translate(-2%,1%)}}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 
-    /* Layout */
-    .container{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:2rem 1.5rem 3rem}
+    .container{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:1.5rem 1.5rem 3rem}
 
     /* Header */
-    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2.5rem;flex-wrap:wrap;gap:1rem}
-    .brand{display:flex;align-items:center;gap:.75rem}
-    .brand-icon{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#f97316,#ea580c);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;box-shadow:0 4px 20px rgba(249,115,22,.25)}
-    .brand-title{font-size:1.5rem;font-weight:800;color:#fff;letter-spacing:-.02em}
-    .brand-title span{color:var(--orange)}
-    .header-links{display:flex;align-items:center;gap:.75rem}
-    .header-links a{font-size:.8rem;font-weight:500;color:var(--text-secondary);text-decoration:none;padding:.45rem .9rem;border-radius:8px;border:1px solid var(--border);transition:all .2s;background:var(--card)}
-    .header-links a:hover{border-color:var(--border-hover);color:var(--orange)}
+    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.8rem;flex-wrap:wrap;gap:1rem;animation:fadeUp .5s ease}
+    .brand{display:flex;align-items:center;gap:.7rem}
+    .brand-icon{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,#f97316,#ea580c);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;box-shadow:0 4px 24px rgba(249,115,22,.3)}
+    .brand h1{font-size:1.35rem;font-weight:800;color:#fff;letter-spacing:-.02em}
+    .brand h1 span{color:var(--orange)}
+    .brand-sub{font-size:.65rem;color:var(--text-dim);font-weight:500;letter-spacing:.5px;text-transform:uppercase}
+    .nav{display:flex;gap:.5rem;flex-wrap:wrap}
+    .nav a{font-size:.72rem;font-weight:600;color:var(--text-sec);text-decoration:none;padding:.4rem .8rem;border-radius:8px;border:1px solid var(--border);background:var(--card);transition:all .2s}
+    .nav a:hover{border-color:var(--border-hover);color:var(--orange)}
 
-    /* Status Banner */
-    .status-bar{display:flex;align-items:center;gap:2rem;padding:1rem 1.5rem;border-radius:14px;background:var(--card);border:1px solid var(--border);margin-bottom:2rem;flex-wrap:wrap}
-    .status-item{display:flex;align-items:center;gap:.5rem}
-    .status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(52,211,153,.5);animation:pulse 2s ease-in-out infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-    .status-label{font-size:.8rem;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.6px}
-    .status-meta{font-size:.75rem;color:var(--text-muted)}
-    .status-meta b{color:var(--text-secondary);font-weight:600}
+    /* Status Strip */
+    .status-strip{display:flex;align-items:center;gap:1.5rem;padding:.75rem 1.2rem;border-radius:12px;background:var(--card);border:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap;animation:fadeUp .5s ease .05s both}
+    .status-pill{display:flex;align-items:center;gap:.4rem}
+    .status-dot{width:7px;height:7px;border-radius:50%;background:#555;transition:all .4s}
+    .status-dot.online{background:var(--green);box-shadow:0 0 10px rgba(52,211,153,.5);animation:pulse 2.5s ease-in-out infinite}
+    .status-dot.offline{background:var(--red);box-shadow:0 0 10px rgba(248,113,113,.5)}
+    .status-text{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-dim);transition:color .3s}
+    .status-text.online{color:var(--green)}
+    .status-text.offline{color:var(--red)}
+    .strip-meta{font-size:.68rem;color:var(--text-dim)}
+    .strip-meta b{color:var(--text-sec);font-weight:600}
+
+    /* Stat Cards */
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:.75rem;margin-bottom:1.5rem;animation:fadeUp .5s ease .1s both}
+    .stat-card{padding:1.1rem 1rem;border-radius:14px;background:var(--card);border:1px solid var(--border);position:relative;overflow:hidden;transition:all .3s}
+    .stat-card:hover{border-color:var(--border-hover);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+    .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+    .stat-card.orange::before{background:var(--orange)}
+    .stat-card.green::before{background:var(--green)}
+    .stat-card.blue::before{background:var(--blue)}
+    .stat-card.purple::before{background:var(--purple)}
+    .stat-card.red::before{background:var(--red)}
+    .stat-card.cyan::before{background:var(--cyan)}
+    .stat-icon{font-size:1.2rem;margin-bottom:.4rem}
+    .stat-val{font-size:1.8rem;font-weight:900;color:#fff;line-height:1;margin-bottom:.15rem}
+    .stat-val.loading{background:linear-gradient(90deg,var(--card) 25%,rgba(255,255,255,.04) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;color:transparent;display:inline-block;min-width:50px}
+    .stat-label{font-size:.68rem;color:var(--text-dim);font-weight:500}
+    .stat-change{font-size:.6rem;font-weight:600;margin-top:.3rem}
+    .stat-change.up{color:var(--green)}
+    .stat-change.down{color:var(--red)}
 
     /* Section */
-    .section{margin-bottom:2rem}
-    .section-header{display:flex;align-items:center;gap:.5rem;margin-bottom:1rem}
-    .section-icon{font-size:1rem}
-    .section-title{font-size:1rem;font-weight:700;color:#fff}
-    .section-count{font-size:.65rem;font-weight:600;color:var(--text-muted);background:rgba(255,255,255,.04);padding:2px 8px;border-radius:10px;margin-left:.3rem}
+    .section{margin-bottom:1.5rem}
+    .sec-head{display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem}
+    .sec-icon{font-size:.95rem}
+    .sec-title{font-size:.95rem;font-weight:700;color:#fff}
+    .sec-badge{font-size:.6rem;font-weight:600;color:var(--text-dim);background:rgba(255,255,255,.04);padding:2px 8px;border-radius:8px}
 
-    /* Provider Cards */
-    .providers{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin-bottom:2rem}
-    .provider{padding:1.3rem;border-radius:14px;background:var(--card);border:1px solid var(--border);transition:all .3s;position:relative;overflow:hidden}
-    .provider:hover{border-color:var(--border-hover);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.3)}
-    .provider::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
-    .provider.shinigami::before{background:linear-gradient(90deg,#f97316,#f59e0b)}
-    .provider.komiku::before{background:linear-gradient(90deg,#60a5fa,#818cf8)}
-    .provider.kiryuu::before{background:linear-gradient(90deg,#34d399,#2dd4bf)}
-    .provider-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem}
-    .provider-name{font-size:1rem;font-weight:700;color:#fff}
-    .provider-badge{font-size:.6rem;font-weight:600;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
-    .provider.shinigami .provider-badge{background:var(--orange-dim);color:var(--orange)}
-    .provider.komiku .provider-badge{background:var(--blue-dim);color:var(--blue)}
-    .provider.kiryuu .provider-badge{background:rgba(45,212,191,.1);color:#2dd4bf}
-    .provider-desc{font-size:.78rem;color:var(--text-secondary);margin-bottom:.8rem;line-height:1.5}
-    .provider-tags{display:flex;flex-wrap:wrap;gap:.4rem}
-    .tag{font-size:.62rem;font-weight:500;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.04);color:var(--text-muted);border:1px solid rgba(255,255,255,.03)}
+    /* Charts Row */
+    .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.5rem;animation:fadeUp .5s ease .15s both}
+    .chart-card{padding:1.2rem;border-radius:14px;background:var(--card);border:1px solid var(--border)}
+    .chart-title{font-size:.78rem;font-weight:700;color:#fff;margin-bottom:.2rem}
+    .chart-sub{font-size:.65rem;color:var(--text-dim);margin-bottom:.8rem}
+    .chart-area{position:relative;height:180px}
+    canvas{width:100%!important;height:100%!important}
 
-    /* Endpoint Groups */
-    .ep-group{margin-bottom:1.5rem}
-    .ep-group-title{font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:.6rem;padding-left:.2rem}
-    .ep-list{display:flex;flex-direction:column;gap:.4rem}
-    .ep{display:flex;align-items:center;gap:.6rem;padding:.6rem .9rem;border-radius:10px;background:var(--card);border:1px solid var(--border);transition:all .2s;cursor:default}
-    .ep:hover{border-color:var(--border-hover);background:rgba(249,115,22,.02)}
-    .method{font-size:.58rem;font-weight:700;padding:3px 8px;border-radius:5px;min-width:42px;text-align:center;text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)}
-    .get{background:var(--green-dim);color:var(--green)}
-    .post{background:var(--blue-dim);color:var(--blue)}
-    .patch{background:var(--yellow-dim);color:var(--yellow)}
-    .put{background:var(--purple-dim);color:var(--purple)}
-    .delete{background:var(--red-dim);color:var(--red)}
-    .ep-path{font-size:.78rem;font-family:var(--mono);font-weight:500;color:#c8c8da}
-    .ep-path .param{color:var(--orange);opacity:.8}
-    .ep-info{margin-left:auto;display:flex;align-items:center;gap:.6rem;flex-shrink:0}
-    .ep-desc{font-size:.7rem;color:var(--text-muted);white-space:nowrap}
-    .ep-query{font-size:.58rem;font-family:var(--mono);color:var(--text-muted);background:rgba(255,255,255,.03);padding:2px 6px;border-radius:4px}
+    /* Provider Health */
+    .provider-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1.5rem;animation:fadeUp .5s ease .2s both}
+    .prov-card{padding:1.1rem;border-radius:14px;background:var(--card);border:1px solid var(--border);position:relative;overflow:hidden;transition:all .3s}
+    .prov-card:hover{border-color:var(--border-hover);transform:translateY(-2px)}
+    .prov-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+    .prov-card.shinigami::before{background:linear-gradient(90deg,#f97316,#f59e0b)}
+    .prov-card.komiku::before{background:linear-gradient(90deg,#60a5fa,#818cf8)}
+    .prov-card.kiryuu::before{background:linear-gradient(90deg,#34d399,#2dd4bf)}
+    .prov-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem}
+    .prov-name{font-size:.9rem;font-weight:700;color:#fff}
+    .prov-status{font-size:.55rem;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
+    .prov-status.checking{background:var(--yellow-glow);color:var(--yellow)}
+    .prov-status.ok{background:var(--green-glow);color:var(--green)}
+    .prov-status.fail{background:var(--red-glow);color:var(--red)}
+    .prov-desc{font-size:.72rem;color:var(--text-sec);margin-bottom:.6rem;line-height:1.5}
+    .prov-meta{display:flex;gap:.8rem;flex-wrap:wrap}
+    .prov-meta-item{font-size:.62rem;color:var(--text-dim)}
+    .prov-meta-item b{color:var(--text-sec)}
+    .prov-tags{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.6rem}
+    .tag{font-size:.58rem;font-weight:500;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.04);color:var(--text-dim);border:1px solid rgba(255,255,255,.03)}
+
+    /* Live Feed + DB Info */
+    .split-row{display:grid;grid-template-columns:1.4fr 1fr;gap:.75rem;margin-bottom:1.5rem;animation:fadeUp .5s ease .25s both}
+    .feed-card{padding:1.2rem;border-radius:14px;background:var(--card);border:1px solid var(--border);max-height:340px;display:flex;flex-direction:column}
+    .feed-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem;padding-right:.3rem}
+    .feed-list::-webkit-scrollbar{width:3px}
+    .feed-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:4px}
+    .feed-item{display:flex;gap:.6rem;padding:.5rem .6rem;border-radius:8px;background:rgba(255,255,255,.015);border:1px solid rgba(255,255,255,.02);transition:background .2s}
+    .feed-item:hover{background:rgba(255,255,255,.03)}
+    .feed-avatar{width:28px;height:28px;border-radius:8px;background:var(--orange-glow);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--orange);flex-shrink:0}
+    .feed-body{flex:1;min-width:0}
+    .feed-user{font-size:.7rem;font-weight:600;color:#fff}
+    .feed-user .role{font-size:.55rem;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:.3rem}
+    .feed-user .role.admin{background:var(--orange-glow);color:var(--orange)}
+    .feed-user .role.user{background:rgba(255,255,255,.04);color:var(--text-dim)}
+    .feed-content{font-size:.68rem;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .feed-meta{font-size:.58rem;color:var(--text-dim);margin-top:.1rem}
+    .feed-meta .comic{color:var(--blue)}
+    .feed-loading{text-align:center;padding:2rem;font-size:.75rem;color:var(--text-dim)}
+    .feed-empty{text-align:center;padding:2rem;font-size:.75rem;color:var(--text-dim)}
+
+    .db-card{padding:1.2rem;border-radius:14px;background:var(--card);border:1px solid var(--border)}
+    .db-table{width:100%;border-collapse:separate;border-spacing:0}
+    .db-table th{font-size:.62rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.6px;text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--border)}
+    .db-table td{font-size:.72rem;padding:.55rem .6rem;border-bottom:1px solid rgba(255,255,255,.02)}
+    .db-table td:first-child{font-family:var(--mono);font-weight:500;color:var(--blue);font-size:.68rem}
+    .db-table td:last-child{text-align:right;font-family:var(--mono);font-weight:600;color:#fff}
+    .db-table tr:last-child td{border-bottom:none}
+
+    /* Endpoints */
+    .tabs{display:flex;gap:.3rem;margin-bottom:.8rem;flex-wrap:wrap}
+    .tab{font-size:.68rem;font-weight:600;padding:.38rem .75rem;border-radius:8px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--text-dim);transition:all .2s;user-select:none}
+    .tab:hover{border-color:rgba(255,255,255,.1);color:var(--text-sec)}
+    .tab.active{background:var(--orange-glow);border-color:rgba(249,115,22,.25);color:var(--orange)}
+    .ep-group{margin-bottom:1rem}
+    .ep-group-title{font-size:.68rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:.4rem;padding-left:.3rem}
+    .ep-list{display:flex;flex-direction:column;gap:.35rem}
+    .ep{display:flex;align-items:center;gap:.55rem;padding:.5rem .8rem;border-radius:9px;background:var(--card);border:1px solid var(--border);transition:all .2s}
+    .ep:hover{border-color:var(--border-hover);background:rgba(249,115,22,.015)}
+    .method{font-size:.55rem;font-weight:700;padding:3px 7px;border-radius:5px;min-width:40px;text-align:center;text-transform:uppercase;letter-spacing:.4px;font-family:var(--mono)}
+    .get{background:var(--green-glow);color:var(--green)}
+    .post{background:var(--blue-glow);color:var(--blue)}
+    .patch{background:var(--yellow-glow);color:var(--yellow)}
+    .put{background:var(--purple-glow);color:var(--purple)}
+    .delete{background:var(--red-glow);color:var(--red)}
+    .ep-path{font-size:.74rem;font-family:var(--mono);font-weight:500;color:#c5c5d8}
+    .ep-path .param{color:var(--orange);opacity:.85}
+    .ep-info{margin-left:auto;display:flex;align-items:center;gap:.5rem;flex-shrink:0}
+    .ep-desc{font-size:.66rem;color:var(--text-dim);white-space:nowrap}
+    .ep-query{font-size:.55rem;font-family:var(--mono);color:var(--text-dim);background:rgba(255,255,255,.03);padding:2px 6px;border-radius:4px}
 
     /* Response Preview */
-    .response-box{margin-top:1rem;border-radius:12px;background:var(--surface);border:1px solid var(--border);overflow:hidden}
-    .response-header{display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)}
-    .response-dot{width:7px;height:7px;border-radius:50%}
-    .response-label{font-size:.7rem;font-weight:600;color:var(--text-muted);margin-left:auto}
-    .response-body{padding:1rem;font-family:var(--mono);font-size:.72rem;line-height:1.7;color:var(--text-secondary);overflow-x:auto;white-space:pre}
-    .response-body .key{color:var(--blue)}
-    .response-body .str{color:var(--green)}
-    .response-body .num{color:var(--orange)}
-    .response-body .bool{color:var(--purple)}
+    .resp-box{border-radius:12px;background:var(--surface);border:1px solid var(--border);overflow:hidden;animation:fadeUp .5s ease .35s both}
+    .resp-head{display:flex;align-items:center;gap:.4rem;padding:.5rem .9rem;background:rgba(255,255,255,.015);border-bottom:1px solid var(--border)}
+    .resp-dot{width:6px;height:6px;border-radius:50%}
+    .resp-label{font-size:.65rem;font-weight:600;color:var(--text-dim);margin-left:auto;font-family:var(--mono)}
+    .resp-body{padding:.9rem;font-family:var(--mono);font-size:.68rem;line-height:1.7;color:var(--text-sec);overflow-x:auto;white-space:pre}
+    .k{color:var(--blue)}.s{color:var(--green)}.n{color:var(--orange)}.b{color:var(--purple)}
 
-    /* Stats Grid */
-    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem;margin-bottom:2rem}
-    .stat{padding:1rem;border-radius:12px;background:var(--card);border:1px solid var(--border);text-align:center}
-    .stat-value{font-size:1.5rem;font-weight:800;color:#fff;margin-bottom:.2rem}
-    .stat-label{font-size:.7rem;color:var(--text-muted);font-weight:500}
+    /* Tech Stack */
+    .tech-strip{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem;animation:fadeUp .5s ease .3s both}
+    .tech{font-size:.62rem;font-weight:600;padding:.35rem .7rem;border-radius:8px;background:var(--card);border:1px solid var(--border);color:var(--text-sec);display:flex;align-items:center;gap:.35rem}
+    .tech-dot{width:5px;height:5px;border-radius:50%}
 
     /* Footer */
-    .footer{display:flex;align-items:center;justify-content:space-between;padding-top:1.5rem;border-top:1px solid var(--border);flex-wrap:wrap;gap:.5rem}
-    .footer-left{display:flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--text-muted)}
-    .footer-left span{color:var(--orange);font-weight:600}
-    .footer-right{font-size:.7rem;color:var(--text-muted)}
+    .footer{display:flex;align-items:center;justify-content:space-between;padding-top:1.2rem;border-top:1px solid var(--border);flex-wrap:wrap;gap:.5rem;animation:fadeUp .5s ease .4s both}
+    .footer-l{font-size:.7rem;color:var(--text-dim)}
+    .footer-l span{color:var(--orange);font-weight:700}
+    .footer-r{font-size:.65rem;color:var(--text-dim);font-family:var(--mono)}
 
-    /* Tabs */
-    .tabs{display:flex;gap:.3rem;margin-bottom:1.2rem;flex-wrap:wrap}
-    .tab{font-size:.72rem;font-weight:600;padding:.4rem .85rem;border-radius:8px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--text-muted);transition:all .2s;user-select:none}
-    .tab:hover{border-color:rgba(255,255,255,.1);color:var(--text-secondary)}
-    .tab.active{background:var(--orange-dim);border-color:rgba(249,115,22,.2);color:var(--orange)}
-
-    /* Responsive */
-    @media(max-width:640px){
-      .container{padding:1.2rem 1rem 2rem}
-      .header{flex-direction:column;align-items:flex-start}
-      .status-bar{flex-direction:column;align-items:flex-start;gap:.8rem}
-      .providers{grid-template-columns:1fr}
+    @media(max-width:768px){
+      .container{padding:1rem}
+      .charts-row,.split-row{grid-template-columns:1fr}
+      .provider-grid{grid-template-columns:1fr}
+      .stat-grid{grid-template-columns:repeat(2,1fr)}
       .ep-info{display:none}
-      .stats{grid-template-columns:repeat(2,1fr)}
+      .header{flex-direction:column;align-items:flex-start}
     }
   </style>
 </head>
@@ -133,110 +190,194 @@
     <header class="header">
       <div class="brand">
         <div class="brand-icon">K</div>
-        <div class="brand-title">Komik<span>Verse</span> API</div>
+        <div>
+          <h1>Komik<span>Verse</span> API</h1>
+          <div class="brand-sub">Dashboard &amp; Monitoring</div>
+        </div>
       </div>
-      <div class="header-links">
+      <nav class="nav">
+        <a href="#stats">Statistik</a>
         <a href="#providers">Providers</a>
         <a href="#endpoints">Endpoints</a>
         <a href="https://komikverse-swart.vercel.app" target="_blank" rel="noopener">&#8592; Situs Utama</a>
-      </div>
+      </nav>
     </header>
 
-    <!-- Status Bar -->
-    <div class="status-bar" id="statusBar">
-      <div class="status-item">
-        <div class="status-dot" id="statusDot"></div>
-        <span class="status-label" id="statusLabel">Checking...</span>
+    <!-- Status Strip -->
+    <div class="status-strip">
+      <div class="status-pill">
+        <div class="status-dot" id="sDot"></div>
+        <span class="status-text" id="sText">Checking...</span>
       </div>
-      <span class="status-meta"><b>Base URL:</b> &nbsp;komikverse-api-amber.vercel.app</span>
-      <span class="status-meta"><b>Versi:</b> &nbsp;v2.0.0</span>
-      <span class="status-meta"><b>Runtime:</b> &nbsp;Vercel Serverless (Node.js)</span>
-      <span class="status-meta" id="latencyMeta" style="display:none"><b>Latency:</b> &nbsp;<span id="latencyValue">-</span></span>
+      <span class="strip-meta"><b>Base URL</b>&ensp;komikverse-api-amber.vercel.app</span>
+      <span class="strip-meta"><b>Version</b>&ensp;v2.0.0</span>
+      <span class="strip-meta"><b>Runtime</b>&ensp;Vercel Serverless</span>
+      <span class="strip-meta" id="latMeta" style="display:none"><b>Latency</b>&ensp;<span id="latVal">-</span></span>
+      <span class="strip-meta" id="upMeta" style="display:none"><b>Uptime</b>&ensp;<span id="upVal">-</span></span>
     </div>
 
-    <!-- Stats -->
-    <div class="stats" id="statsGrid">
-      <div class="stat">
-        <div class="stat-value">3</div>
-        <div class="stat-label">Provider</div>
+    <!-- Live Stats -->
+    <div id="stats" class="stat-grid">
+      <div class="stat-card orange">
+        <div class="stat-icon">&#128100;</div>
+        <div class="stat-val loading" id="vUsers">--</div>
+        <div class="stat-label">Total Users</div>
       </div>
-      <div class="stat">
-        <div class="stat-value">9</div>
-        <div class="stat-label">Comic Endpoints</div>
+      <div class="stat-card blue">
+        <div class="stat-icon">&#128172;</div>
+        <div class="stat-val loading" id="vComments">--</div>
+        <div class="stat-label">Total Komentar</div>
       </div>
-      <div class="stat">
-        <div class="stat-value">5</div>
-        <div class="stat-label">Auth Endpoints</div>
+      <div class="stat-card yellow" style="--yellow:#fbbf24">
+        <div class="stat-icon">&#9203;</div>
+        <div class="stat-val loading" id="vPending">--</div>
+        <div class="stat-label">Menunggu Review</div>
+        <div class="stat-change" id="pendingHint"></div>
       </div>
-      <div class="stat">
-        <div class="stat-value">4</div>
-        <div class="stat-label">Comment Endpoints</div>
+      <div class="stat-card green">
+        <div class="stat-icon">&#128226;</div>
+        <div class="stat-val loading" id="vAds">--</div>
+        <div class="stat-label">Iklan Aktif</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-icon">&#127918;</div>
+        <div class="stat-val" id="vProviders">3</div>
+        <div class="stat-label">Data Provider</div>
+      </div>
+      <div class="stat-card cyan">
+        <div class="stat-icon">&#128268;</div>
+        <div class="stat-val">22</div>
+        <div class="stat-label">API Routes</div>
       </div>
     </div>
 
-    <!-- Providers -->
+    <!-- Charts -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-title">Distribusi Data</div>
+        <div class="chart-sub">Users vs Komentar vs Seed Data</div>
+        <div class="chart-area"><canvas id="chartBar"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Status Komentar</div>
+        <div class="chart-sub">Approved &middot; Pending &middot; Hidden</div>
+        <div class="chart-area"><canvas id="chartDonut"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Provider Health -->
     <div class="section" id="providers">
-      <div class="section-header">
-        <span class="section-icon">&#9889;</span>
-        <span class="section-title">Data Providers</span>
-        <span class="section-count">3 sumber</span>
+      <div class="sec-head">
+        <span class="sec-icon">&#9889;</span>
+        <span class="sec-title">Provider Health Monitor</span>
+        <span class="sec-badge">Live Check</span>
       </div>
-      <div class="providers">
-        <!-- Shinigami -->
-        <div class="provider shinigami">
-          <div class="provider-head">
-            <span class="provider-name">Shinigami</span>
-            <span class="provider-badge">Default</span>
-          </div>
-          <p class="provider-desc">Provider utama menggunakan REST API langsung. Data JSON terstruktur dengan dukungan status dari AniList GraphQL API. Retry otomatis 3x dengan delay 500ms.</p>
-          <div class="provider-tags">
-            <span class="tag">REST API</span>
-            <span class="tag">JSON Native</span>
-            <span class="tag">AniList Status</span>
-            <span class="tag">Auto Retry</span>
-            <span class="tag">Cache 30min</span>
-          </div>
+    </div>
+    <div class="provider-grid">
+      <div class="prov-card shinigami">
+        <div class="prov-head">
+          <span class="prov-name">&#9889; Shinigami</span>
+          <span class="prov-status checking" id="pShinigami">Checking</span>
         </div>
-        <!-- Komiku -->
-        <div class="provider komiku">
-          <div class="provider-head">
-            <span class="provider-name">Komiku</span>
-            <span class="provider-badge">Scraper</span>
-          </div>
-          <p class="provider-desc">Provider alternatif dari komiku.org. Menggunakan HTML scraping dengan Cheerio. Mendukung 42+ genre dengan listing dan detail halaman.</p>
-          <div class="provider-tags">
-            <span class="tag">HTML Scraping</span>
-            <span class="tag">Cheerio Parser</span>
-            <span class="tag">42+ Genre</span>
-            <span class="tag">Bahasa Indonesia</span>
-          </div>
+        <p class="prov-desc">Provider utama â€” REST API langsung dari api.shngm.io dengan AniList status enrichment.</p>
+        <div class="prov-meta">
+          <span class="prov-meta-item"><b>Method:</b> REST API</span>
+          <span class="prov-meta-item"><b>Format:</b> JSON</span>
+          <span class="prov-meta-item" id="pShinMs"></span>
         </div>
-        <!-- Kiryuu -->
-        <div class="provider kiryuu">
-          <div class="provider-head">
-            <span class="provider-name">Kiryuu</span>
-            <span class="provider-badge">Hybrid</span>
-          </div>
-          <p class="provider-desc">Provider hybrid yang menggabungkan HTML scraping dengan WordPress REST API. Search via HTMX POST, metadata via WP JSON endpoint.</p>
-          <div class="provider-tags">
-            <span class="tag">WordPress API</span>
-            <span class="tag">HTML + REST</span>
-            <span class="tag">HTMX Search</span>
-            <span class="tag">Batch Resolve</span>
-          </div>
+        <div class="prov-tags">
+          <span class="tag">Default</span><span class="tag">JSON Native</span><span class="tag">AniList</span><span class="tag">Retry 3x</span><span class="tag">Cache 30min</span>
         </div>
       </div>
+      <div class="prov-card komiku">
+        <div class="prov-head">
+          <span class="prov-name">&#128214; Komiku</span>
+          <span class="prov-status checking" id="pKomiku">Checking</span>
+        </div>
+        <p class="prov-desc">Provider alternatif â€” HTML scraping dari komiku.org menggunakan Cheerio parser.</p>
+        <div class="prov-meta">
+          <span class="prov-meta-item"><b>Method:</b> Scraping</span>
+          <span class="prov-meta-item"><b>Parser:</b> Cheerio</span>
+          <span class="prov-meta-item" id="pKomMs"></span>
+        </div>
+        <div class="prov-tags">
+          <span class="tag">HTML Scraping</span><span class="tag">42+ Genre</span><span class="tag">Bahasa ID</span>
+        </div>
+      </div>
+      <div class="prov-card kiryuu">
+        <div class="prov-head">
+          <span class="prov-name">&#128640; Kiryuu</span>
+          <span class="prov-status checking" id="pKiryuu">Checking</span>
+        </div>
+        <p class="prov-desc">Provider hybrid â€” WordPress REST API + HTML scraping dari v1.kiryuu.to.</p>
+        <div class="prov-meta">
+          <span class="prov-meta-item"><b>Method:</b> Hybrid</span>
+          <span class="prov-meta-item"><b>CMS:</b> WordPress</span>
+          <span class="prov-meta-item" id="pKirMs"></span>
+        </div>
+        <div class="prov-tags">
+          <span class="tag">WP REST API</span><span class="tag">HTMX Search</span><span class="tag">Batch Resolve</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Feed + DB Stats -->
+    <div class="split-row">
+      <div class="feed-card">
+        <div class="sec-head" style="margin-bottom:.6rem">
+          <span class="sec-icon">&#128172;</span>
+          <span class="sec-title">Komentar Terbaru</span>
+          <span class="sec-badge" id="feedBadge">Live</span>
+        </div>
+        <div class="feed-list" id="feedList">
+          <div class="feed-loading" id="feedLoading">Memuat data...</div>
+        </div>
+      </div>
+      <div class="db-card">
+        <div class="sec-head" style="margin-bottom:.6rem">
+          <span class="sec-icon">&#128451;</span>
+          <span class="sec-title">Database Info</span>
+        </div>
+        <table class="db-table">
+          <thead><tr><th>Table</th><th>Deskripsi</th><th>Records</th></tr></thead>
+          <tbody id="dbBody">
+            <tr><td>users</td><td style="font-size:.68rem;color:var(--text-dim)">Akun pengguna</td><td id="dbUsers" class="stat-val loading" style="font-size:.72rem">-</td></tr>
+            <tr><td>comments</td><td style="font-size:.68rem;color:var(--text-dim)">Komentar komik</td><td id="dbComments" class="stat-val loading" style="font-size:.72rem">-</td></tr>
+            <tr><td>ad_placements</td><td style="font-size:.68rem;color:var(--text-dim)">Slot iklan</td><td id="dbAds" class="stat-val loading" style="font-size:.72rem">-</td></tr>
+            <tr><td>site_settings</td><td style="font-size:.68rem;color:var(--text-dim)">Konfigurasi</td><td id="dbSettings" class="stat-val loading" style="font-size:.72rem">-</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:1rem">
+          <div class="sec-head" style="margin-bottom:.4rem">
+            <span class="sec-icon">&#9881;</span>
+            <span class="sec-title" style="font-size:.8rem">Site Settings</span>
+          </div>
+          <div id="settingsList" style="display:flex;flex-direction:column;gap:.25rem">
+            <div class="feed-loading">Memuat...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tech Stack -->
+    <div class="tech-strip">
+      <div class="tech"><div class="tech-dot" style="background:var(--green)"></div>Express 5</div>
+      <div class="tech"><div class="tech-dot" style="background:var(--blue)"></div>TypeScript</div>
+      <div class="tech"><div class="tech-dot" style="background:var(--purple)"></div>Neon Postgres</div>
+      <div class="tech"><div class="tech-dot" style="background:var(--orange)"></div>Vercel Serverless</div>
+      <div class="tech"><div class="tech-dot" style="background:var(--cyan)"></div>JWT Auth</div>
+      <div class="tech"><div class="tech-dot" style="background:var(--yellow)"></div>Cheerio</div>
+      <div class="tech"><div class="tech-dot" style="background:var(--red)"></div>bcrypt</div>
+      <div class="tech"><div class="tech-dot" style="background:var(--green)"></div>AniList GraphQL</div>
     </div>
 
     <!-- Endpoints -->
     <div class="section" id="endpoints">
-      <div class="section-header">
-        <span class="section-icon">&#128268;</span>
-        <span class="section-title">API Endpoints</span>
-        <span class="section-count">22 routes</span>
+      <div class="sec-head">
+        <span class="sec-icon">&#128268;</span>
+        <span class="sec-title">API Endpoints</span>
+        <span class="sec-badge">22 routes</span>
       </div>
-
-      <!-- Tabs -->
       <div class="tabs" id="epTabs">
         <div class="tab active" data-tab="comic">Komik Data</div>
         <div class="tab" data-tab="auth">Autentikasi</div>
@@ -245,77 +386,72 @@
         <div class="tab" data-tab="system">Sistem</div>
       </div>
 
-      <!-- Comic Data -->
       <div class="ep-tab-content" id="tab-comic">
         <div class="ep-group">
           <div class="ep-group-title">&#9656; Data Komik &mdash; ?provider=shinigami|komiku|kiryuu</div>
           <div class="ep-list">
             <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/popular</span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Komik populer / top</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/terbaru</span><div class="ep-info"><span class="ep-query">?page=&provider=</span><span class="ep-desc">Update terbaru (paginated)</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/terbaru</span><div class="ep-info"><span class="ep-query">?page=&amp;provider=</span><span class="ep-desc">Update terbaru (paginated)</span></div></div>
             <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/recommended</span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Komik rekomendasi</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/search</span><div class="ep-info"><span class="ep-query">?keyword=&provider=</span><span class="ep-desc">Cari komik</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/search</span><div class="ep-info"><span class="ep-query">?keyword=&amp;provider=</span><span class="ep-desc">Cari komik</span></div></div>
             <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/detail/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Detail + chapter list</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/read/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Baca chapter (panel images)</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/genre</span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Daftar semua genre</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/genre/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?page=&provider=</span><span class="ep-desc">Komik per genre</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/health</span><div class="ep-info"><span class="ep-desc">Health check + provider list</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/read/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Baca chapter (images)</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/genre</span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Daftar genre</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/genre/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?page=&amp;provider=</span><span class="ep-desc">Komik per genre</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/health</span><div class="ep-info"><span class="ep-desc">Health check</span></div></div>
           </div>
         </div>
       </div>
 
-      <!-- Auth -->
       <div class="ep-tab-content" id="tab-auth" style="display:none">
         <div class="ep-group">
-          <div class="ep-group-title">&#9656; Autentikasi &mdash; JWT + HttpOnly Cookie</div>
+          <div class="ep-group-title">&#9656; Autentikasi &mdash; JWT + HttpOnly Cookie (7 hari)</div>
           <div class="ep-list">
             <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/register</span><div class="ep-info"><span class="ep-desc">Daftar akun baru</span></div></div>
-            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/login</span><div class="ep-info"><span class="ep-desc">Login &rarr; JWT token</span></div></div>
-            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/logout</span><div class="ep-info"><span class="ep-desc">Hapus cookie &amp; logout</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/auth/me</span><div class="ep-info"><span class="ep-desc">Profil user (Bearer token)</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/login</span><div class="ep-info"><span class="ep-desc">Login &rarr; JWT</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/logout</span><div class="ep-info"><span class="ep-desc">Hapus cookie</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/auth/me</span><div class="ep-info"><span class="ep-desc">Profil user</span></div></div>
             <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/auth/change-password</span><div class="ep-info"><span class="ep-desc">Ganti password</span></div></div>
           </div>
         </div>
       </div>
 
-      <!-- Comments -->
       <div class="ep-tab-content" id="tab-comments" style="display:none">
         <div class="ep-group">
-          <div class="ep-group-title">&#9656; Komentar Publik &mdash; Threaded, Moderation</div>
+          <div class="ep-group-title">&#9656; Komentar &mdash; Threaded &middot; Moderation</div>
           <div class="ep-list">
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-query">?comic_slug=</span><span class="ep-desc">Ambil komentar per komik</span></div></div>
-            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-desc">Tulis komentar (auth required)</span></div></div>
-            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-desc">Update status (admin only)</span></div></div>
-            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus komentar</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-query">?comic_slug=</span><span class="ep-desc">Ambil komentar</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-desc">Tulis komentar</span></div></div>
+            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-desc">Update status</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus</span></div></div>
           </div>
         </div>
       </div>
 
-      <!-- Admin -->
       <div class="ep-tab-content" id="tab-admin" style="display:none">
         <div class="ep-group">
           <div class="ep-group-title">&#9656; Admin Panel &mdash; Requires Admin JWT</div>
           <div class="ep-list">
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/stats</span><div class="ep-info"><span class="ep-desc">Dashboard statistik</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Daftar semua user</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/stats</span><div class="ep-info"><span class="ep-desc">Dashboard stats</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">List users</span></div></div>
             <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Buat user</span></div></div>
             <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Edit username</span></div></div>
-            <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Reset password user</span></div></div>
-            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus user + komentar</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-query">?status=</span><span class="ep-desc">Semua komentar (filter)</span></div></div>
-            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-desc">Buat komentar sbg admin</span></div></div>
-            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-desc">Edit/moderasi komentar</span></div></div>
-            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus komentar</span></div></div>
-            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/seed</span><div class="ep-info"><span class="ep-desc">Generate data seed</span></div></div>
-            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/seed</span><div class="ep-info"><span class="ep-desc">Hapus semua data seed</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/ads</span><div class="ep-info"><span class="ep-desc">Daftar ad placements</span></div></div>
+            <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Reset password</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus user</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-query">?status=</span><span class="ep-desc">List komentar</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-desc">Buat komentar</span></div></div>
+            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-desc">Moderasi</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/seed</span><div class="ep-info"><span class="ep-desc">Generate seed</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/seed</span><div class="ep-info"><span class="ep-desc">Hapus seed</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/ads</span><div class="ep-info"><span class="ep-desc">List iklan</span></div></div>
             <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/ads</span><div class="ep-info"><span class="ep-desc">Update iklan</span></div></div>
-            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/settings</span><div class="ep-info"><span class="ep-desc">Site settings</span></div></div>
-            <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/settings</span><div class="ep-info"><span class="ep-desc">Update settings</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/settings</span><div class="ep-info"><span class="ep-desc">Settings</span></div></div>
+            <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/settings</span><div class="ep-info"><span class="ep-desc">Update</span></div></div>
           </div>
         </div>
       </div>
 
-      <!-- System -->
       <div class="ep-tab-content" id="tab-system" style="display:none">
         <div class="ep-group">
           <div class="ep-group-title">&#9656; Sistem &amp; Utilitas</div>
@@ -329,83 +465,312 @@
     </div>
 
     <!-- Response Format -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-icon">&#128196;</span>
-        <span class="section-title">Format Response</span>
+    <div class="section" style="animation:fadeUp .5s ease .35s both">
+      <div class="sec-head">
+        <span class="sec-icon">&#128196;</span>
+        <span class="sec-title">Response Format</span>
       </div>
-      <div class="response-box">
-        <div class="response-header">
-          <div class="response-dot" style="background:#f87171"></div>
-          <div class="response-dot" style="background:#fbbf24"></div>
-          <div class="response-dot" style="background:#34d399"></div>
-          <span class="response-label">GET /api/popular — 200 OK</span>
+      <div class="resp-box">
+        <div class="resp-head">
+          <div class="resp-dot" style="background:var(--red)"></div>
+          <div class="resp-dot" style="background:var(--yellow)"></div>
+          <div class="resp-dot" style="background:var(--green)"></div>
+          <span class="resp-label">GET /api/popular â€” 200 OK</span>
         </div>
-        <div class="response-body">{
-  <span class="key">"status"</span>: <span class="str">"success"</span>,
-  <span class="key">"data"</span>: [
+        <div class="resp-body">{
+  <span class="k">"status"</span>: <span class="s">"success"</span>,
+  <span class="k">"data"</span>: [
     {
-      <span class="key">"title"</span>: <span class="str">"Solo Leveling"</span>,
-      <span class="key">"thumbnail"</span>: <span class="str">"https://..."</span>,
-      <span class="key">"type"</span>: <span class="str">"Manhwa"</span>,
-      <span class="key">"chapter"</span>: <span class="str">"Chapter 200"</span>,
-      <span class="key">"rating"</span>: <span class="str">"9.2"</span>,
-      <span class="key">"status"</span>: <span class="str">"Completed"</span>,
-      <span class="key">"genre"</span>: <span class="str">"Action, Fantasy"</span>
+      <span class="k">"title"</span>: <span class="s">"Solo Leveling"</span>,
+      <span class="k">"thumbnail"</span>: <span class="s">"https://assets.shngm.id/..."</span>,
+      <span class="k">"type"</span>: <span class="s">"Manhwa"</span>,
+      <span class="k">"chapter"</span>: <span class="s">"Chapter 200"</span>,
+      <span class="k">"rating"</span>: <span class="s">"9.2"</span>,
+      <span class="k">"status"</span>: <span class="s">"Completed"</span>,
+      <span class="k">"genre"</span>: <span class="s">"Action, Fantasy"</span>
     }
   ],
-  <span class="key">"current_page"</span>: <span class="num">1</span>,
-  <span class="key">"has_next"</span>: <span class="bool">true</span>,
-  <span class="key">"has_prev"</span>: <span class="bool">false</span>
+  <span class="k">"current_page"</span>: <span class="n">1</span>,
+  <span class="k">"has_next"</span>: <span class="b">true</span>,
+  <span class="k">"has_prev"</span>: <span class="b">false</span>
 }</div>
       </div>
     </div>
 
     <!-- Footer -->
     <div class="footer">
-      <div class="footer-left">Built with &#9829; by <span>KomikVerse</span></div>
-      <div class="footer-right">Express 5 &middot; TypeScript &middot; Neon Postgres &middot; Vercel Serverless</div>
+      <div class="footer-l">Built with &#9829; by <span>KomikVerse</span> &middot; Express 5 + TypeScript + Neon Postgres</div>
+      <div class="footer-r">v2.0.0</div>
     </div>
 
   </div>
 
   <script>
-    // Tab switching
-    document.querySelectorAll('.tab').forEach(function(tab) {
-      tab.addEventListener('click', function() {
-        document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-        document.querySelectorAll('.ep-tab-content').forEach(function(c) { c.style.display = 'none'; });
-        tab.classList.add('active');
-        var target = document.getElementById('tab-' + tab.dataset.tab);
-        if (target) target.style.display = 'block';
+    // === Tab Switching ===
+    document.querySelectorAll('.tab').forEach(function(t){
+      t.addEventListener('click',function(){
+        document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+        document.querySelectorAll('.ep-tab-content').forEach(function(c){c.style.display='none'});
+        t.classList.add('active');
+        var el=document.getElementById('tab-'+t.dataset.tab);
+        if(el) el.style.display='block';
       });
     });
 
-    // Health check
-    (function() {
-      var dot = document.getElementById('statusDot');
-      var label = document.getElementById('statusLabel');
-      var latMeta = document.getElementById('latencyMeta');
-      var latVal = document.getElementById('latencyValue');
-      var start = Date.now();
-      fetch('/api/health')
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          var ms = Date.now() - start;
-          dot.style.background = 'var(--green)';
-          dot.style.boxShadow = '0 0 8px rgba(52,211,153,.5)';
-          label.textContent = 'Online';
-          label.style.color = 'var(--green)';
-          latMeta.style.display = '';
-          latVal.textContent = ms + 'ms';
-        })
-        .catch(function() {
-          dot.style.background = 'var(--red)';
-          dot.style.boxShadow = '0 0 8px rgba(248,113,113,.5)';
-          label.textContent = 'Offline';
-          label.style.color = 'var(--red)';
-        });
+    // === Helpers ===
+    var API='/api';
+    function $(id){return document.getElementById(id)}
+    function setVal(id,v){var el=$(id);if(el){el.textContent=v;el.classList.remove('loading')}}
+    function timeAgo(d){var s=Math.floor((Date.now()-new Date(d).getTime())/1e3);if(s<60)return s+'d lalu';if(s<3600)return Math.floor(s/60)+'m lalu';if(s<86400)return Math.floor(s/3600)+'j lalu';return Math.floor(s/86400)+'h lalu'}
+
+    // === Health Check ===
+    (function(){
+      var t0=Date.now();
+      fetch(API+'/health').then(function(r){return r.json()}).then(function(d){
+        var ms=Date.now()-t0;
+        $('sDot').classList.add('online');
+        $('sText').textContent='Online';
+        $('sText').classList.add('online');
+        $('latMeta').style.display='';
+        $('latVal').textContent=ms+'ms';
+        $('upMeta').style.display='';
+        $('upVal').textContent='100%';
+      }).catch(function(){
+        $('sDot').classList.add('offline');
+        $('sText').textContent='Offline';
+        $('sText').classList.add('offline');
+      });
     })();
+
+    // === Provider Health Checks ===
+    ['shinigami','komiku','kiryuu'].forEach(function(p){
+      var badge=$(p==='shinigami'?'pShinigami':p==='komiku'?'pKomiku':'pKiryuu');
+      var msEl=$(p==='shinigami'?'pShinMs':p==='komiku'?'pKomMs':'pKirMs');
+      var t0=Date.now();
+      fetch(API+'/popular?provider='+p).then(function(r){
+        var ms=Date.now()-t0;
+        if(r.ok){
+          badge.textContent='Online';badge.className='prov-status ok';
+          msEl.innerHTML='<b>Latency:</b> '+ms+'ms';
+        } else {
+          badge.textContent='Error '+r.status;badge.className='prov-status fail';
+        }
+      }).catch(function(){
+        badge.textContent='Offline';badge.className='prov-status fail';
+      });
+    });
+
+    // === Load Stats ===
+    var statsData={total_users:0,total_comments:0,pending_comments:0,active_ads:0,seed_users:0};
+    var recentComments=[];
+
+    fetch(API+'/admin/stats').then(function(r){return r.json()}).then(function(d){
+      if(d.stats){
+        statsData=d.stats;
+        setVal('vUsers',d.stats.total_users);
+        setVal('vComments',d.stats.total_comments);
+        setVal('vPending',d.stats.pending_comments);
+        setVal('vAds',d.stats.active_ads);
+        setVal('dbUsers',d.stats.total_users);
+        setVal('dbComments',d.stats.total_comments);
+        if(d.stats.pending_comments>0){
+          $('pendingHint').textContent='Perlu moderasi';
+          $('pendingHint').className='stat-change down';
+        }
+      }
+      if(d.recent_comments&&d.recent_comments.length){
+        recentComments=d.recent_comments;
+        renderFeed(recentComments);
+      } else {
+        $('feedLoading').textContent='Belum ada komentar';
+      }
+      drawCharts();
+    }).catch(function(){
+      ['vUsers','vComments','vPending','vAds'].forEach(function(id){setVal(id,'?')});
+      $('feedLoading').textContent='Gagal memuat data';
+      drawCharts();
+    });
+
+    // === Load Ads Count ===
+    fetch(API+'/ads').then(function(r){return r.json()}).then(function(d){
+      if(d.ads){
+        var count=Object.keys(d.ads).length;
+        setVal('dbAds',count);
+      }
+    }).catch(function(){setVal('dbAds','?')});
+
+    // === Load Settings ===
+    fetch(API+'/admin/settings').then(function(r){return r.json()}).then(function(d){
+      if(d.settings){
+        var keys=Object.keys(d.settings);
+        setVal('dbSettings',keys.length);
+        var html='';
+        keys.forEach(function(k){
+          var v=d.settings[k];
+          var display=v==='true'?'<span style="color:var(--green)">&#10003; Aktif</span>':v==='false'?'<span style="color:var(--red)">&#10007; Nonaktif</span>':'<span style="color:var(--text-sec)">'+v+'</span>';
+          html+='<div style="display:flex;justify-content:space-between;padding:.3rem .5rem;border-radius:6px;background:rgba(255,255,255,.015);font-size:.68rem"><span style="color:var(--text-dim);font-family:var(--mono)">'+k+'</span>'+display+'</div>';
+        });
+        $('settingsList').innerHTML=html;
+      }
+    }).catch(function(){setVal('dbSettings','?');$('settingsList').innerHTML='<div class="feed-loading">Gagal</div>'});
+
+    // === Render Comment Feed ===
+    function renderFeed(items){
+      var html='';
+      items.forEach(function(c){
+        var initials=c.username?c.username.substring(0,2).toUpperCase():'??';
+        var roleBadge=c.user_role==='admin'?'<span class="role admin">Admin</span>':'';
+        var statusColor=c.status==='approved'?'var(--green)':c.status==='pending'?'var(--yellow)':'var(--red)';
+        html+='<div class="feed-item">'
+          +'<div class="feed-avatar">'+initials+'</div>'
+          +'<div class="feed-body">'
+          +'<div class="feed-user">'+c.username+' '+roleBadge+' <span style="float:right;font-size:.55rem;color:'+statusColor+';font-weight:600;text-transform:uppercase">'+c.status+'</span></div>'
+          +'<div class="feed-content">'+c.content+'</div>'
+          +'<div class="feed-meta"><span class="comic">'+c.comic_title+'</span> &middot; '+timeAgo(c.created_at)+'</div>'
+          +'</div></div>';
+      });
+      $('feedList').innerHTML=html;
+    }
+
+    // === Charts (Pure Canvas) ===
+    function drawCharts(){
+      drawBarChart();
+      drawDonutChart();
+    }
+
+    function drawBarChart(){
+      var canvas=$('chartBar');
+      if(!canvas) return;
+      var ctx=canvas.getContext('2d');
+      var dpr=window.devicePixelRatio||1;
+      var rect=canvas.parentElement.getBoundingClientRect();
+      canvas.width=rect.width*dpr;
+      canvas.height=rect.height*dpr;
+      ctx.scale(dpr,dpr);
+      var W=rect.width,H=rect.height;
+
+      var realUsers=Math.max(0,statsData.total_users-statsData.seed_users);
+      var realComments=Math.max(0,statsData.total_comments-(statsData.seed_users>0?statsData.total_comments*0.8:0));
+      var data=[
+        {label:'Users',value:realUsers,color:'#f97316'},
+        {label:'Seed Users',value:statsData.seed_users,color:'#f59e0b'},
+        {label:'Comments',value:statsData.total_comments,color:'#60a5fa'},
+        {label:'Pending',value:statsData.pending_comments,color:'#fbbf24'},
+        {label:'Ads',value:statsData.active_ads,color:'#34d399'}
+      ];
+      var max=Math.max.apply(null,data.map(function(d){return d.value}))||1;
+      var pad={t:15,b:35,l:10,r:10};
+      var barW=(W-pad.l-pad.r)/data.length;
+      var maxH=H-pad.t-pad.b;
+
+      ctx.clearRect(0,0,W,H);
+
+      // Grid lines
+      for(var i=0;i<=4;i++){
+        var y=pad.t+maxH*(1-i/4);
+        ctx.strokeStyle='rgba(255,255,255,.04)';
+        ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+        ctx.fillStyle='rgba(255,255,255,.15)';
+        ctx.font='9px Inter';
+        ctx.textAlign='left';
+        ctx.fillText(Math.round(max*i/4),pad.l,y-3);
+      }
+
+      data.forEach(function(d,idx){
+        var bH=Math.max(2,(d.value/max)*maxH);
+        var x=pad.l+idx*barW+barW*0.15;
+        var w=barW*0.7;
+        var y=pad.t+maxH-bH;
+
+        // Bar with gradient
+        var grad=ctx.createLinearGradient(0,y,0,pad.t+maxH);
+        grad.addColorStop(0,d.color);
+        grad.addColorStop(1,d.color+'33');
+        ctx.fillStyle=grad;
+        ctx.beginPath();
+        var r=3;
+        ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+        ctx.lineTo(x+w,pad.t+maxH);ctx.lineTo(x,pad.t+maxH);ctx.lineTo(x,y+r);
+        ctx.quadraticCurveTo(x,y,x+r,y);ctx.fill();
+
+        // Value on top
+        ctx.fillStyle='#fff';
+        ctx.font='bold 10px Inter';
+        ctx.textAlign='center';
+        ctx.fillText(d.value,x+w/2,y-4);
+
+        // Label
+        ctx.fillStyle='rgba(255,255,255,.35)';
+        ctx.font='9px Inter';
+        ctx.fillText(d.label,x+w/2,H-8);
+      });
+    }
+
+    function drawDonutChart(){
+      var canvas=$('chartDonut');
+      if(!canvas) return;
+      var ctx=canvas.getContext('2d');
+      var dpr=window.devicePixelRatio||1;
+      var rect=canvas.parentElement.getBoundingClientRect();
+      canvas.width=rect.width*dpr;
+      canvas.height=rect.height*dpr;
+      ctx.scale(dpr,dpr);
+      var W=rect.width,H=rect.height;
+      var cx=W/2,cy=H/2-5;
+      var R=Math.min(cx,cy)-20;
+      var r=R*0.55;
+
+      var approved=Math.max(0,statsData.total_comments-statsData.pending_comments);
+      var pending=statsData.pending_comments;
+      var hidden=0; // We don't have this stat separately
+      var total=approved+pending+hidden||1;
+      var slices=[
+        {label:'Approved',value:approved,color:'#34d399'},
+        {label:'Pending',value:pending,color:'#fbbf24'},
+        {label:'Hidden',value:hidden,color:'#f87171'}
+      ].filter(function(s){return s.value>0});
+      if(!slices.length) slices=[{label:'No Data',value:1,color:'#333'}];
+
+      ctx.clearRect(0,0,W,H);
+      var angle=-Math.PI/2;
+      slices.forEach(function(s){
+        var sweep=(s.value/total)*Math.PI*2;
+        ctx.beginPath();
+        ctx.arc(cx,cy,R,angle,angle+sweep);
+        ctx.arc(cx,cy,r,angle+sweep,angle,true);
+        ctx.closePath();
+        ctx.fillStyle=s.color;
+        ctx.fill();
+        angle+=sweep;
+      });
+
+      // Center text
+      ctx.fillStyle='#fff';
+      ctx.font='bold 22px Inter';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(statsData.total_comments,cx,cy-4);
+      ctx.fillStyle='rgba(255,255,255,.4)';
+      ctx.font='10px Inter';
+      ctx.fillText('Total',cx,cy+14);
+
+      // Legend
+      var lx=10,ly=H-18;
+      slices.forEach(function(s,i){
+        ctx.fillStyle=s.color;
+        ctx.beginPath();ctx.arc(lx+5,ly,4,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,.5)';
+        ctx.font='10px Inter';
+        ctx.textAlign='left';
+        ctx.fillText(s.label+' ('+s.value+')',lx+14,ly+3);
+        lx+=ctx.measureText(s.label+' ('+s.value+')').width+28;
+      });
+    }
+
+    // Resize charts
+    var resizeTimer;
+    window.addEventListener('resize',function(){clearTimeout(resizeTimer);resizeTimer=setTimeout(drawCharts,200)});
   </script>
 </body>
 </html>
