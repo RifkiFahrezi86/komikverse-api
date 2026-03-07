@@ -229,27 +229,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "Makin ke sini makin seru","Guilty pleasure gue nih 😅","Binge read 50 chapter sekaligus",
         "The art is insane!","Love the story progression","Keren abis!!! 🤩",
       ];
-      const COMIC_DATA = [
-        { slug: "solo-leveling", title: "Solo Leveling" },
-        { slug: "one-piece", title: "One Piece" },
-        { slug: "tower-of-god", title: "Tower of God" },
-        { slug: "the-beginning-after-the-end", title: "The Beginning After The End" },
-        { slug: "omniscient-reader", title: "Omniscient Reader's Viewpoint" },
-        { slug: "martial-peak", title: "Martial Peak" },
-        { slug: "return-of-the-mount-hua-sect", title: "Return of the Mount Hua Sect" },
-        { slug: "nano-machine", title: "Nano Machine" },
-        { slug: "eleceed", title: "Eleceed" },
-        { slug: "windbreaker", title: "Windbreaker" },
-        { slug: "legend-of-the-northern-blade", title: "Legend of the Northern Blade" },
-        { slug: "the-great-mage-returns", title: "The Great Mage Returns After 4000 Years" },
-        { slug: "overgeared", title: "Overgeared" },
-        { slug: "doom-breaker", title: "Doom Breaker" },
-        { slug: "teenage-mercenary", title: "Teenage Mercenary" },
-      ];
 
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
       const userCount = Math.min(Math.max(parseInt(body.userCount) || 20, 5), 50);
       const commentCount = Math.min(Math.max(parseInt(body.commentCount) || 60, 10), 200);
+
+      // Accept real comic slugs from frontend
+      const comicsFromClient: { slug: string; title: string }[] = Array.isArray(body.comics) ? body.comics : [];
+      const COMIC_DATA = comicsFromClient.length > 0
+        ? comicsFromClient.map((c: any) => ({
+            slug: String(c.slug || "").slice(0, 255),
+            title: String(c.title || "").slice(0, 500),
+          })).filter((c: any) => c.slug)
+        : [{ slug: "komik-sample", title: "Komik Sample" }];
 
       const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
@@ -307,6 +299,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         success: true,
         users_created: createdUserIds.length,
         comments_created: insertedComments,
+        comics_used: COMIC_DATA.length,
       });
     }
 
