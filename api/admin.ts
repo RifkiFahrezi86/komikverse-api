@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 let _query: any;
 let _jwt: any;
 let _bcrypt: any;
+let _seedColsMigrated = false;
 
 async function loadAll() {
   if (!_query) {
@@ -20,6 +21,14 @@ async function loadAll() {
   if (!_bcrypt) {
     const b = await import("bcryptjs");
     _bcrypt = (b as any).default || b;
+  }
+  // Auto-ensure is_seed columns exist (runs once per cold start)
+  if (!_seedColsMigrated) {
+    try {
+      await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
+      await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
+    } catch { /* ignore if already exists or table missing */ }
+    _seedColsMigrated = true;
   }
 }
 
