@@ -3,11 +3,8 @@
   "outputDirectory": "",
   "framework": null,
   "functions": {
-    "api/admin.ts": {
-      "maxDuration": 30
-    },
     "api/**/*.ts": {
-      "maxDuration": 15
+      "maxDuration": 30
     }
   },
   "rewrites": [
