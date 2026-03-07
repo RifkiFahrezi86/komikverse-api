@@ -6,54 +6,406 @@
   <title>KomikVerse API</title>
   <meta name="description" content="KomikVerse REST API - Backend untuk platform baca manga, manhwa, dan manhua.">
   <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    :root{--bg:#06060e;--surface:#0d0d18;--card:#111120;--border:rgba(255,255,255,.06);--border-hover:rgba(249,115,22,.2);--text:#e8e8f0;--text-secondary:#8888a0;--text-muted:#55556a;--orange:#f97316;--orange-dim:rgba(249,115,22,.1);--green:#34d399;--green-dim:rgba(16,185,129,.1);--blue:#60a5fa;--blue-dim:rgba(59,130,246,.1);--purple:#a78bfa;--purple-dim:rgba(167,139,250,.1);--red:#f87171;--red-dim:rgba(248,113,113,.1);--yellow:#fbbf24;--yellow-dim:rgba(251,191,36,.1);--mono:'JetBrains Mono',Consolas,monospace;--sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
     *{margin:0;padding:0;box-sizing:border-box}
-    body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a12;color:#e0e0e8;overflow:hidden}
-    .bg{position:fixed;inset:0;z-index:0}
-    .bg::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(ellipse at 30% 20%,rgba(249,115,22,.06) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(99,102,241,.04) 0%,transparent 60%);animation:drift 20s ease-in-out infinite alternate}
-    @keyframes drift{0%{transform:translate(0,0)}100%{transform:translate(-3%,2%)}}
-    .card{position:relative;z-index:1;max-width:520px;width:90%;padding:2.5rem;border-radius:20px;background:rgba(18,18,26,.85);border:1px solid rgba(255,255,255,.04);backdrop-filter:blur(20px);box-shadow:0 25px 60px rgba(0,0,0,.4)}
-    .logo{display:flex;align-items:center;gap:.6rem;margin-bottom:1.5rem}
-    .logo-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#f97316,#ea580c);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff}
-    .logo-text{font-size:1.3rem;font-weight:700;color:#fff}
-    .logo-text span{color:#f97316}
-    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;background:rgba(16,185,129,.1);color:#34d399;border:1px solid rgba(16,185,129,.15);margin-bottom:1.2rem}
-    .desc{font-size:.9rem;color:#8e8ea0;line-height:1.6;margin-bottom:1.8rem}
-    .endpoints{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.8rem}
-    .ep{display:flex;align-items:center;gap:.6rem;padding:.55rem .8rem;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);transition:all .2s}
-    .ep:hover{background:rgba(249,115,22,.04);border-color:rgba(249,115,22,.1)}
-    .method{font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:5px;min-width:36px;text-align:center;text-transform:uppercase;letter-spacing:.5px}
-    .get{background:rgba(16,185,129,.12);color:#34d399}
-    .post{background:rgba(59,130,246,.12);color:#60a5fa}
-    .ep-path{font-size:.78rem;font-family:'SF Mono',Menlo,Consolas,monospace;color:#c0c0d0}
-    .ep-desc{font-size:.7rem;color:#5c5c6e;margin-left:auto}
-    .footer{display:flex;align-items:center;justify-content:space-between;padding-top:1.2rem;border-top:1px solid rgba(255,255,255,.04)}
-    .footer a{font-size:.78rem;color:#f97316;text-decoration:none;font-weight:500;transition:opacity .2s}
-    .footer a:hover{opacity:.8}
-    .ver{font-size:.65rem;color:#3c3c4e}
+    html{scroll-behavior:smooth}
+    body{min-height:100vh;font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}
+
+    /* Background */
+    .bg-grid{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+    .bg-grid::before{content:'';position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.03) 1px,transparent 1px);background-size:32px 32px}
+    .bg-grid::after{content:'';position:absolute;top:-30%;left:-20%;width:150%;height:150%;background:radial-gradient(ellipse at 20% 10%,rgba(249,115,22,.04) 0%,transparent 55%),radial-gradient(ellipse at 80% 90%,rgba(99,102,241,.03) 0%,transparent 55%);animation:drift 25s ease-in-out infinite alternate}
+    @keyframes drift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(-2%,1%) scale(1.02)}}
+
+    /* Layout */
+    .container{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:2rem 1.5rem 3rem}
+
+    /* Header */
+    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2.5rem;flex-wrap:wrap;gap:1rem}
+    .brand{display:flex;align-items:center;gap:.75rem}
+    .brand-icon{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#f97316,#ea580c);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;box-shadow:0 4px 20px rgba(249,115,22,.25)}
+    .brand-title{font-size:1.5rem;font-weight:800;color:#fff;letter-spacing:-.02em}
+    .brand-title span{color:var(--orange)}
+    .header-links{display:flex;align-items:center;gap:.75rem}
+    .header-links a{font-size:.8rem;font-weight:500;color:var(--text-secondary);text-decoration:none;padding:.45rem .9rem;border-radius:8px;border:1px solid var(--border);transition:all .2s;background:var(--card)}
+    .header-links a:hover{border-color:var(--border-hover);color:var(--orange)}
+
+    /* Status Banner */
+    .status-bar{display:flex;align-items:center;gap:2rem;padding:1rem 1.5rem;border-radius:14px;background:var(--card);border:1px solid var(--border);margin-bottom:2rem;flex-wrap:wrap}
+    .status-item{display:flex;align-items:center;gap:.5rem}
+    .status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px rgba(52,211,153,.5);animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    .status-label{font-size:.8rem;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.6px}
+    .status-meta{font-size:.75rem;color:var(--text-muted)}
+    .status-meta b{color:var(--text-secondary);font-weight:600}
+
+    /* Section */
+    .section{margin-bottom:2rem}
+    .section-header{display:flex;align-items:center;gap:.5rem;margin-bottom:1rem}
+    .section-icon{font-size:1rem}
+    .section-title{font-size:1rem;font-weight:700;color:#fff}
+    .section-count{font-size:.65rem;font-weight:600;color:var(--text-muted);background:rgba(255,255,255,.04);padding:2px 8px;border-radius:10px;margin-left:.3rem}
+
+    /* Provider Cards */
+    .providers{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin-bottom:2rem}
+    .provider{padding:1.3rem;border-radius:14px;background:var(--card);border:1px solid var(--border);transition:all .3s;position:relative;overflow:hidden}
+    .provider:hover{border-color:var(--border-hover);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.3)}
+    .provider::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0}
+    .provider.shinigami::before{background:linear-gradient(90deg,#f97316,#f59e0b)}
+    .provider.komiku::before{background:linear-gradient(90deg,#60a5fa,#818cf8)}
+    .provider.kiryuu::before{background:linear-gradient(90deg,#34d399,#2dd4bf)}
+    .provider-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem}
+    .provider-name{font-size:1rem;font-weight:700;color:#fff}
+    .provider-badge{font-size:.6rem;font-weight:600;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
+    .provider.shinigami .provider-badge{background:var(--orange-dim);color:var(--orange)}
+    .provider.komiku .provider-badge{background:var(--blue-dim);color:var(--blue)}
+    .provider.kiryuu .provider-badge{background:rgba(45,212,191,.1);color:#2dd4bf}
+    .provider-desc{font-size:.78rem;color:var(--text-secondary);margin-bottom:.8rem;line-height:1.5}
+    .provider-tags{display:flex;flex-wrap:wrap;gap:.4rem}
+    .tag{font-size:.62rem;font-weight:500;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.04);color:var(--text-muted);border:1px solid rgba(255,255,255,.03)}
+
+    /* Endpoint Groups */
+    .ep-group{margin-bottom:1.5rem}
+    .ep-group-title{font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:.6rem;padding-left:.2rem}
+    .ep-list{display:flex;flex-direction:column;gap:.4rem}
+    .ep{display:flex;align-items:center;gap:.6rem;padding:.6rem .9rem;border-radius:10px;background:var(--card);border:1px solid var(--border);transition:all .2s;cursor:default}
+    .ep:hover{border-color:var(--border-hover);background:rgba(249,115,22,.02)}
+    .method{font-size:.58rem;font-weight:700;padding:3px 8px;border-radius:5px;min-width:42px;text-align:center;text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)}
+    .get{background:var(--green-dim);color:var(--green)}
+    .post{background:var(--blue-dim);color:var(--blue)}
+    .patch{background:var(--yellow-dim);color:var(--yellow)}
+    .put{background:var(--purple-dim);color:var(--purple)}
+    .delete{background:var(--red-dim);color:var(--red)}
+    .ep-path{font-size:.78rem;font-family:var(--mono);font-weight:500;color:#c8c8da}
+    .ep-path .param{color:var(--orange);opacity:.8}
+    .ep-info{margin-left:auto;display:flex;align-items:center;gap:.6rem;flex-shrink:0}
+    .ep-desc{font-size:.7rem;color:var(--text-muted);white-space:nowrap}
+    .ep-query{font-size:.58rem;font-family:var(--mono);color:var(--text-muted);background:rgba(255,255,255,.03);padding:2px 6px;border-radius:4px}
+
+    /* Response Preview */
+    .response-box{margin-top:1rem;border-radius:12px;background:var(--surface);border:1px solid var(--border);overflow:hidden}
+    .response-header{display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)}
+    .response-dot{width:7px;height:7px;border-radius:50%}
+    .response-label{font-size:.7rem;font-weight:600;color:var(--text-muted);margin-left:auto}
+    .response-body{padding:1rem;font-family:var(--mono);font-size:.72rem;line-height:1.7;color:var(--text-secondary);overflow-x:auto;white-space:pre}
+    .response-body .key{color:var(--blue)}
+    .response-body .str{color:var(--green)}
+    .response-body .num{color:var(--orange)}
+    .response-body .bool{color:var(--purple)}
+
+    /* Stats Grid */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem;margin-bottom:2rem}
+    .stat{padding:1rem;border-radius:12px;background:var(--card);border:1px solid var(--border);text-align:center}
+    .stat-value{font-size:1.5rem;font-weight:800;color:#fff;margin-bottom:.2rem}
+    .stat-label{font-size:.7rem;color:var(--text-muted);font-weight:500}
+
+    /* Footer */
+    .footer{display:flex;align-items:center;justify-content:space-between;padding-top:1.5rem;border-top:1px solid var(--border);flex-wrap:wrap;gap:.5rem}
+    .footer-left{display:flex;align-items:center;gap:.3rem;font-size:.75rem;color:var(--text-muted)}
+    .footer-left span{color:var(--orange);font-weight:600}
+    .footer-right{font-size:.7rem;color:var(--text-muted)}
+
+    /* Tabs */
+    .tabs{display:flex;gap:.3rem;margin-bottom:1.2rem;flex-wrap:wrap}
+    .tab{font-size:.72rem;font-weight:600;padding:.4rem .85rem;border-radius:8px;cursor:pointer;background:transparent;border:1px solid var(--border);color:var(--text-muted);transition:all .2s;user-select:none}
+    .tab:hover{border-color:rgba(255,255,255,.1);color:var(--text-secondary)}
+    .tab.active{background:var(--orange-dim);border-color:rgba(249,115,22,.2);color:var(--orange)}
+
+    /* Responsive */
+    @media(max-width:640px){
+      .container{padding:1.2rem 1rem 2rem}
+      .header{flex-direction:column;align-items:flex-start}
+      .status-bar{flex-direction:column;align-items:flex-start;gap:.8rem}
+      .providers{grid-template-columns:1fr}
+      .ep-info{display:none}
+      .stats{grid-template-columns:repeat(2,1fr)}
+    }
   </style>
 </head>
 <body>
-  <div class="bg"></div>
-  <div class="card">
-    <div class="logo">
-      <div class="logo-icon">K</div>
-      <div class="logo-text">Komik<span>Verse</span> API</div>
+  <div class="bg-grid"></div>
+  <div class="container">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">K</div>
+        <div class="brand-title">Komik<span>Verse</span> API</div>
+      </div>
+      <div class="header-links">
+        <a href="#providers">Providers</a>
+        <a href="#endpoints">Endpoints</a>
+        <a href="https://komikverse-swart.vercel.app" target="_blank" rel="noopener">&#8592; Situs Utama</a>
+      </div>
+    </header>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+      <div class="status-item">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="status-label" id="statusLabel">Checking...</span>
+      </div>
+      <span class="status-meta"><b>Base URL:</b> &nbsp;komikverse-api-amber.vercel.app</span>
+      <span class="status-meta"><b>Versi:</b> &nbsp;v2.0.0</span>
+      <span class="status-meta"><b>Runtime:</b> &nbsp;Vercel Serverless (Node.js)</span>
+      <span class="status-meta" id="latencyMeta" style="display:none"><b>Latency:</b> &nbsp;<span id="latencyValue">-</span></span>
     </div>
-    <div class="badge">&#9679; Online</div>
-    <p class="desc">REST API backend untuk platform KomikVerse. Menyediakan data manga, manhwa, dan manhua dari berbagai sumber.</p>
-    <div class="endpoints">
-      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/popular</span><span class="ep-desc">Komik populer</span></div>
-      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/latest</span><span class="ep-desc">Update terbaru</span></div>
-      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/search/:q</span><span class="ep-desc">Cari komik</span></div>
-      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/detail/:slug</span><span class="ep-desc">Detail komik</span></div>
-      <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/comments</span><span class="ep-desc">Komentar</span></div>
-      <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/login</span><span class="ep-desc">Autentikasi</span></div>
+
+    <!-- Stats -->
+    <div class="stats" id="statsGrid">
+      <div class="stat">
+        <div class="stat-value">3</div>
+        <div class="stat-label">Provider</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">9</div>
+        <div class="stat-label">Comic Endpoints</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">5</div>
+        <div class="stat-label">Auth Endpoints</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">4</div>
+        <div class="stat-label">Comment Endpoints</div>
+      </div>
     </div>
+
+    <!-- Providers -->
+    <div class="section" id="providers">
+      <div class="section-header">
+        <span class="section-icon">&#9889;</span>
+        <span class="section-title">Data Providers</span>
+        <span class="section-count">3 sumber</span>
+      </div>
+      <div class="providers">
+        <!-- Shinigami -->
+        <div class="provider shinigami">
+          <div class="provider-head">
+            <span class="provider-name">Shinigami</span>
+            <span class="provider-badge">Default</span>
+          </div>
+          <p class="provider-desc">Provider utama menggunakan REST API langsung. Data JSON terstruktur dengan dukungan status dari AniList GraphQL API. Retry otomatis 3x dengan delay 500ms.</p>
+          <div class="provider-tags">
+            <span class="tag">REST API</span>
+            <span class="tag">JSON Native</span>
+            <span class="tag">AniList Status</span>
+            <span class="tag">Auto Retry</span>
+            <span class="tag">Cache 30min</span>
+          </div>
+        </div>
+        <!-- Komiku -->
+        <div class="provider komiku">
+          <div class="provider-head">
+            <span class="provider-name">Komiku</span>
+            <span class="provider-badge">Scraper</span>
+          </div>
+          <p class="provider-desc">Provider alternatif dari komiku.org. Menggunakan HTML scraping dengan Cheerio. Mendukung 42+ genre dengan listing dan detail halaman.</p>
+          <div class="provider-tags">
+            <span class="tag">HTML Scraping</span>
+            <span class="tag">Cheerio Parser</span>
+            <span class="tag">42+ Genre</span>
+            <span class="tag">Bahasa Indonesia</span>
+          </div>
+        </div>
+        <!-- Kiryuu -->
+        <div class="provider kiryuu">
+          <div class="provider-head">
+            <span class="provider-name">Kiryuu</span>
+            <span class="provider-badge">Hybrid</span>
+          </div>
+          <p class="provider-desc">Provider hybrid yang menggabungkan HTML scraping dengan WordPress REST API. Search via HTMX POST, metadata via WP JSON endpoint.</p>
+          <div class="provider-tags">
+            <span class="tag">WordPress API</span>
+            <span class="tag">HTML + REST</span>
+            <span class="tag">HTMX Search</span>
+            <span class="tag">Batch Resolve</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Endpoints -->
+    <div class="section" id="endpoints">
+      <div class="section-header">
+        <span class="section-icon">&#128268;</span>
+        <span class="section-title">API Endpoints</span>
+        <span class="section-count">22 routes</span>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs" id="epTabs">
+        <div class="tab active" data-tab="comic">Komik Data</div>
+        <div class="tab" data-tab="auth">Autentikasi</div>
+        <div class="tab" data-tab="comments">Komentar</div>
+        <div class="tab" data-tab="admin">Admin</div>
+        <div class="tab" data-tab="system">Sistem</div>
+      </div>
+
+      <!-- Comic Data -->
+      <div class="ep-tab-content" id="tab-comic">
+        <div class="ep-group">
+          <div class="ep-group-title">&#9656; Data Komik &mdash; ?provider=shinigami|komiku|kiryuu</div>
+          <div class="ep-list">
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/popular</span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Komik populer / top</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/terbaru</span><div class="ep-info"><span class="ep-query">?page=&provider=</span><span class="ep-desc">Update terbaru (paginated)</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/recommended</span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Komik rekomendasi</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/search</span><div class="ep-info"><span class="ep-query">?keyword=&provider=</span><span class="ep-desc">Cari komik</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/detail/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Detail + chapter list</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/read/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Baca chapter (panel images)</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/genre</span><div class="ep-info"><span class="ep-query">?provider=</span><span class="ep-desc">Daftar semua genre</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/genre/<span class="param">:slug</span></span><div class="ep-info"><span class="ep-query">?page=&provider=</span><span class="ep-desc">Komik per genre</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/health</span><div class="ep-info"><span class="ep-desc">Health check + provider list</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auth -->
+      <div class="ep-tab-content" id="tab-auth" style="display:none">
+        <div class="ep-group">
+          <div class="ep-group-title">&#9656; Autentikasi &mdash; JWT + HttpOnly Cookie</div>
+          <div class="ep-list">
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/register</span><div class="ep-info"><span class="ep-desc">Daftar akun baru</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/login</span><div class="ep-info"><span class="ep-desc">Login &rarr; JWT token</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/auth/logout</span><div class="ep-info"><span class="ep-desc">Hapus cookie &amp; logout</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/auth/me</span><div class="ep-info"><span class="ep-desc">Profil user (Bearer token)</span></div></div>
+            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/auth/change-password</span><div class="ep-info"><span class="ep-desc">Ganti password</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comments -->
+      <div class="ep-tab-content" id="tab-comments" style="display:none">
+        <div class="ep-group">
+          <div class="ep-group-title">&#9656; Komentar Publik &mdash; Threaded, Moderation</div>
+          <div class="ep-list">
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-query">?comic_slug=</span><span class="ep-desc">Ambil komentar per komik</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-desc">Tulis komentar (auth required)</span></div></div>
+            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-desc">Update status (admin only)</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/comments</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus komentar</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin -->
+      <div class="ep-tab-content" id="tab-admin" style="display:none">
+        <div class="ep-group">
+          <div class="ep-group-title">&#9656; Admin Panel &mdash; Requires Admin JWT</div>
+          <div class="ep-list">
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/stats</span><div class="ep-info"><span class="ep-desc">Dashboard statistik</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Daftar semua user</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Buat user</span></div></div>
+            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Edit username</span></div></div>
+            <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Reset password user</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus user + komentar</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-query">?status=</span><span class="ep-desc">Semua komentar (filter)</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-desc">Buat komentar sbg admin</span></div></div>
+            <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-desc">Edit/moderasi komentar</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/comments</span><div class="ep-info"><span class="ep-query">?id=</span><span class="ep-desc">Hapus komentar</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/seed</span><div class="ep-info"><span class="ep-desc">Generate data seed</span></div></div>
+            <div class="ep"><span class="method delete">DELETE</span><span class="ep-path">/api/admin/seed</span><div class="ep-info"><span class="ep-desc">Hapus semua data seed</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/ads</span><div class="ep-info"><span class="ep-desc">Daftar ad placements</span></div></div>
+            <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/ads</span><div class="ep-info"><span class="ep-desc">Update iklan</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/settings</span><div class="ep-info"><span class="ep-desc">Site settings</span></div></div>
+            <div class="ep"><span class="method put">PUT</span><span class="ep-path">/api/admin/settings</span><div class="ep-info"><span class="ep-desc">Update settings</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- System -->
+      <div class="ep-tab-content" id="tab-system" style="display:none">
+        <div class="ep-group">
+          <div class="ep-group-title">&#9656; Sistem &amp; Utilitas</div>
+          <div class="ep-list">
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/ads</span><div class="ep-info"><span class="ep-desc">Iklan aktif (publik)</span></div></div>
+            <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/migrate</span><div class="ep-info"><span class="ep-desc">Migrasi database</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/health</span><div class="ep-info"><span class="ep-desc">Health check</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Response Format -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-icon">&#128196;</span>
+        <span class="section-title">Format Response</span>
+      </div>
+      <div class="response-box">
+        <div class="response-header">
+          <div class="response-dot" style="background:#f87171"></div>
+          <div class="response-dot" style="background:#fbbf24"></div>
+          <div class="response-dot" style="background:#34d399"></div>
+          <span class="response-label">GET /api/popular — 200 OK</span>
+        </div>
+        <div class="response-body">{
+  <span class="key">"status"</span>: <span class="str">"success"</span>,
+  <span class="key">"data"</span>: [
+    {
+      <span class="key">"title"</span>: <span class="str">"Solo Leveling"</span>,
+      <span class="key">"thumbnail"</span>: <span class="str">"https://..."</span>,
+      <span class="key">"type"</span>: <span class="str">"Manhwa"</span>,
+      <span class="key">"chapter"</span>: <span class="str">"Chapter 200"</span>,
+      <span class="key">"rating"</span>: <span class="str">"9.2"</span>,
+      <span class="key">"status"</span>: <span class="str">"Completed"</span>,
+      <span class="key">"genre"</span>: <span class="str">"Action, Fantasy"</span>
+    }
+  ],
+  <span class="key">"current_page"</span>: <span class="num">1</span>,
+  <span class="key">"has_next"</span>: <span class="bool">true</span>,
+  <span class="key">"has_prev"</span>: <span class="bool">false</span>
+}</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
     <div class="footer">
-      <a href="https://komikverse-swart.vercel.app" target="_blank" rel="noopener">&#8592; Kembali ke Situs</a>
-      <span class="ver">v1.0.0</span>
+      <div class="footer-left">Built with &#9829; by <span>KomikVerse</span></div>
+      <div class="footer-right">Express 5 &middot; TypeScript &middot; Neon Postgres &middot; Vercel Serverless</div>
     </div>
+
   </div>
+
+  <script>
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.ep-tab-content').forEach(function(c) { c.style.display = 'none'; });
+        tab.classList.add('active');
+        var target = document.getElementById('tab-' + tab.dataset.tab);
+        if (target) target.style.display = 'block';
+      });
+    });
+
+    // Health check
+    (function() {
+      var dot = document.getElementById('statusDot');
+      var label = document.getElementById('statusLabel');
+      var latMeta = document.getElementById('latencyMeta');
+      var latVal = document.getElementById('latencyValue');
+      var start = Date.now();
+      fetch('/api/health')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var ms = Date.now() - start;
+          dot.style.background = 'var(--green)';
+          dot.style.boxShadow = '0 0 8px rgba(52,211,153,.5)';
+          label.textContent = 'Online';
+          label.style.color = 'var(--green)';
+          latMeta.style.display = '';
+          latVal.textContent = ms + 'ms';
+        })
+        .catch(function() {
+          dot.style.background = 'var(--red)';
+          dot.style.boxShadow = '0 0 8px rgba(248,113,113,.5)';
+          label.textContent = 'Offline';
+          label.style.color = 'var(--red)';
+        });
+    })();
+  </script>
 </body>
 </html>
