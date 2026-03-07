@@ -129,6 +129,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
     await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
 
+    // Analytics table for tracking requests & visitors
+    await _query(`
+      CREATE TABLE IF NOT EXISTS api_analytics (
+        id SERIAL PRIMARY KEY,
+        ip_hash VARCHAR(64) NOT NULL,
+        endpoint VARCHAR(255) NOT NULL,
+        provider VARCHAR(50),
+        user_agent TEXT,
+        referer TEXT,
+        country VARCHAR(10),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+    await _query("CREATE INDEX IF NOT EXISTS idx_analytics_created ON api_analytics(created_at DESC)");
+    await _query("CREATE INDEX IF NOT EXISTS idx_analytics_endpoint ON api_analytics(endpoint)");
+    await _query("CREATE INDEX IF NOT EXISTS idx_analytics_ip ON api_analytics(ip_hash)");
+
     return res.status(200).json({ success: true, message: "Migration completed successfully" });
   } catch (error) {
     console.error("Migration error:", error);

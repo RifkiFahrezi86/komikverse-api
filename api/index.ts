@@ -1061,6 +1061,60 @@ const providers: Record<string, Record<string, (query: any, slug?: string) => Pr
   kiryuu: kiryuuHandlers,
 };
 
+// ─── Analytics Tracking (fire-and-forget) ───
+let _analyticsQuery: any;
+let _analyticsMigrated = false;
+
+async function getAnalyticsDb() {
+  if (!_analyticsQuery) {
+    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
+    if (!url) return null;
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const sql = neon(url);
+    _analyticsQuery = (text: string, params: unknown[] = []) => sql.query(text, params);
+  }
+  if (!_analyticsMigrated) {
+    try {
+      await _analyticsQuery(`
+        CREATE TABLE IF NOT EXISTS api_analytics (
+          id SERIAL PRIMARY KEY,
+          ip_hash VARCHAR(64) NOT NULL,
+          endpoint VARCHAR(255) NOT NULL,
+          provider VARCHAR(50),
+          user_agent TEXT,
+          referer TEXT,
+          country VARCHAR(10),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+      `);
+      await _analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_created ON api_analytics(created_at DESC)");
+      await _analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_ip ON api_analytics(ip_hash)");
+    } catch { /* ignore */ }
+    _analyticsMigrated = true;
+  }
+  return _analyticsQuery;
+}
+
+function hashIP(ip: string): string {
+  return crypto.createHash("sha256").update(ip + (process.env.API_SECRET || "salt")).digest("hex").slice(0, 16);
+}
+
+function trackRequest(req: VercelRequest, endpoint: string, provider: string) {
+  // Fire-and-forget: don't await, don't block response
+  getAnalyticsDb().then(q => {
+    if (!q) return;
+    const ip = getRateLimitKey(req);
+    const ipHash = hashIP(ip);
+    const ua = (typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : "").slice(0, 500);
+    const referer = (typeof req.headers.referer === "string" ? req.headers.referer : "").slice(0, 500);
+    const country = (typeof req.headers["x-vercel-ip-country"] === "string" ? req.headers["x-vercel-ip-country"] : "").slice(0, 10);
+    q("INSERT INTO api_analytics (ip_hash, endpoint, provider, user_agent, referer, country) VALUES ($1,$2,$3,$4,$5,$6)",
+      [ipHash, endpoint.slice(0, 255), provider.slice(0, 50), ua, referer, country]
+    ).catch(() => {});
+  }).catch(() => {});
+}
+
 // ─── Main handler ───
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Security headers
@@ -1136,6 +1190,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result = await handlerFn(req.query, slug);
     const statusCode = result.code && result.status === "error" ? result.code : 200;
+
+    // Track request (fire-and-forget, non-blocking)
+    trackRequest(req, `/${route}${slug ? "/" + slug : ""}`, provider);
 
     // Cache control — public cache for 2 min, stale-while-revalidate for 5 min
     res.setHeader("Cache-Control", "public, s-maxage=120, stale-while-revalidate=300");

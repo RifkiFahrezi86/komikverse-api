@@ -67,6 +67,48 @@
     .stat-change.up{color:var(--green)}
     .stat-change.down{color:var(--red)}
 
+    /* Analytics Cards */
+    .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem;margin-bottom:1.5rem;animation:fadeUp .5s ease .12s both}
+    .analytics-card{padding:1.1rem 1rem;border-radius:14px;background:var(--card);border:1px solid var(--border);position:relative;overflow:hidden;transition:all .3s}
+    .analytics-card:hover{border-color:var(--border-hover);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+    .analytics-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+    .analytics-card.visitors::before{background:linear-gradient(90deg,#60a5fa,#818cf8)}
+    .analytics-card.requests::before{background:linear-gradient(90deg,#34d399,#2dd4bf)}
+    .analytics-card.today::before{background:linear-gradient(90deg,#f97316,#f59e0b)}
+    .analytics-card.week::before{background:linear-gradient(90deg,#a78bfa,#e879f9)}
+    .an-icon{font-size:1.5rem;margin-bottom:.4rem}
+    .an-val{font-size:2rem;font-weight:900;color:#fff;line-height:1;margin-bottom:.15rem;font-family:var(--mono)}
+    .an-val.loading{background:linear-gradient(90deg,var(--card) 25%,rgba(255,255,255,.04) 50%,var(--card) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;color:transparent;display:inline-block;min-width:60px}
+    .an-label{font-size:.7rem;color:var(--text-dim);font-weight:500}
+    .an-sub{font-size:.6rem;color:var(--text-dim);margin-top:.3rem;font-family:var(--mono)}
+    .an-sub span{color:var(--green);font-weight:600}
+
+    /* Traffic Chart */
+    .traffic-card{padding:1.2rem;border-radius:14px;background:var(--card);border:1px solid var(--border);margin-bottom:1.5rem;animation:fadeUp .5s ease .14s both}
+    .traffic-area{position:relative;height:220px}
+
+    /* Analytics Split Row */
+    .analytics-split{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;margin-bottom:1.5rem;animation:fadeUp .5s ease .16s both}
+    .ep-rank-card{padding:1.2rem;border-radius:14px;background:var(--card);border:1px solid var(--border)}
+    .rank-list{display:flex;flex-direction:column;gap:.35rem}
+    .rank-item{display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;border-radius:8px;background:rgba(255,255,255,.015);border:1px solid rgba(255,255,255,.02)}
+    .rank-pos{font-size:.65rem;font-weight:800;color:var(--orange);font-family:var(--mono);min-width:18px}
+    .rank-name{font-size:.7rem;color:var(--text-sec);flex:1;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .rank-count{font-size:.68rem;font-weight:700;color:#fff;font-family:var(--mono)}
+    .rank-bar{height:3px;border-radius:2px;margin-top:.15rem}
+
+    /* Request Feed */
+    .req-feed-card{padding:1.2rem;border-radius:14px;background:var(--card);border:1px solid var(--border);max-height:320px;display:flex;flex-direction:column}
+    .req-feed-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:.3rem;padding-right:.3rem}
+    .req-feed-list::-webkit-scrollbar{width:3px}
+    .req-feed-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:4px}
+    .req-item{display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;border-radius:7px;background:rgba(255,255,255,.01);border:1px solid rgba(255,255,255,.02)}
+    .req-method{font-size:.5rem;font-weight:700;padding:2px 5px;border-radius:4px;background:var(--green-glow);color:var(--green);font-family:var(--mono)}
+    .req-path{font-size:.65rem;color:var(--text-sec);font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .req-prov{font-size:.55rem;color:var(--text-dim);font-family:var(--mono)}
+    .req-time{font-size:.55rem;color:var(--text-dim)}
+    .req-country{font-size:.6rem}
+
     /* Section */
     .section{margin-bottom:1.5rem}
     .sec-head{display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem}
@@ -177,6 +219,8 @@
       .charts-row,.split-row{grid-template-columns:1fr}
       .provider-grid{grid-template-columns:1fr}
       .stat-grid{grid-template-columns:repeat(2,1fr)}
+      .analytics-grid{grid-template-columns:repeat(2,1fr)}
+      .analytics-split{grid-template-columns:1fr}
       .ep-info{display:none}
       .header{flex-direction:column;align-items:flex-start}
     }
@@ -197,6 +241,7 @@
       </div>
       <nav class="nav">
         <a href="#stats">Statistik</a>
+        <a href="#analytics">Analytics</a>
         <a href="#providers">Providers</a>
         <a href="#endpoints">Endpoints</a>
         <a href="https://komikverse-swart.vercel.app" target="_blank" rel="noopener">&#8592; Situs Utama</a>
@@ -210,7 +255,7 @@
         <span class="status-text" id="sText">Checking...</span>
       </div>
       <span class="strip-meta"><b>Base URL</b>&ensp;komikverse-api-amber.vercel.app</span>
-      <span class="strip-meta"><b>Version</b>&ensp;v2.0.0</span>
+      <span class="strip-meta"><b>Version</b>&ensp;v2.1.0</span>
       <span class="strip-meta"><b>Runtime</b>&ensp;Vercel Serverless</span>
       <span class="strip-meta" id="latMeta" style="display:none"><b>Latency</b>&ensp;<span id="latVal">-</span></span>
       <span class="strip-meta" id="upMeta" style="display:none"><b>Uptime</b>&ensp;<span id="upVal">-</span></span>
@@ -248,6 +293,83 @@
         <div class="stat-icon">&#128268;</div>
         <div class="stat-val">22</div>
         <div class="stat-label">API Routes</div>
+      </div>
+    </div>
+
+    <!-- Analytics Stats -->
+    <div class="section" id="analytics">
+      <div class="sec-head">
+        <span class="sec-icon">&#128200;</span>
+        <span class="sec-title">Traffic &amp; Analytics</span>
+        <span class="sec-badge">Real-time</span>
+      </div>
+    </div>
+    <div class="analytics-grid">
+      <div class="analytics-card visitors">
+        <div class="an-icon">&#128101;</div>
+        <div class="an-val loading" id="anVisitors">--</div>
+        <div class="an-label">Total Pengunjung Unik</div>
+        <div class="an-sub">All time &mdash; berdasarkan IP hash</div>
+      </div>
+      <div class="analytics-card requests">
+        <div class="an-icon">&#128229;</div>
+        <div class="an-val loading" id="anRequests">--</div>
+        <div class="an-label">Total Requests</div>
+        <div class="an-sub">Semua endpoint API</div>
+      </div>
+      <div class="analytics-card today">
+        <div class="an-icon">&#9728;&#65039;</div>
+        <div class="an-val loading" id="anToday">--</div>
+        <div class="an-label">Request Hari Ini</div>
+        <div class="an-sub"><span id="anTodayVisitors">-</span> pengunjung unik</div>
+      </div>
+      <div class="analytics-card week">
+        <div class="an-icon">&#128197;</div>
+        <div class="an-val loading" id="anWeek">--</div>
+        <div class="an-label">Request 7 Hari</div>
+        <div class="an-sub"><span id="anWeekVisitors">-</span> pengunjung unik</div>
+      </div>
+    </div>
+
+    <!-- Traffic Chart (30 days) -->
+    <div class="traffic-card">
+      <div class="chart-title">&#128200; Grafik Traffic 30 Hari Terakhir</div>
+      <div class="chart-sub">Request harian &middot; Pengunjung unik per hari</div>
+      <div class="traffic-area"><canvas id="chartTraffic"></canvas></div>
+    </div>
+
+    <!-- Top Endpoints + Provider Distribution + Countries -->
+    <div class="analytics-split">
+      <div class="ep-rank-card">
+        <div class="sec-head" style="margin-bottom:.6rem">
+          <span class="sec-icon">&#127942;</span>
+          <span class="sec-title" style="font-size:.85rem">Top Endpoints</span>
+        </div>
+        <div class="rank-list" id="rankEndpoints">
+          <div class="feed-loading">Memuat...</div>
+        </div>
+      </div>
+      <div class="ep-rank-card">
+        <div class="sec-head" style="margin-bottom:.6rem">
+          <span class="sec-icon">&#128268;</span>
+          <span class="sec-title" style="font-size:.85rem">Request per Provider</span>
+        </div>
+        <div class="rank-list" id="rankProviders">
+          <div class="feed-loading">Memuat...</div>
+        </div>
+        <div style="margin-top:.8rem">
+          <canvas id="chartProviders" style="height:120px"></canvas>
+        </div>
+      </div>
+      <div class="req-feed-card">
+        <div class="sec-head" style="margin-bottom:.6rem">
+          <span class="sec-icon">&#9889;</span>
+          <span class="sec-title" style="font-size:.85rem">Request Terbaru</span>
+          <span class="sec-badge">Live</span>
+        </div>
+        <div class="req-feed-list" id="reqFeedList">
+          <div class="feed-loading">Memuat...</div>
+        </div>
       </div>
     </div>
 
@@ -345,6 +467,7 @@
             <tr><td>comments</td><td style="font-size:.68rem;color:var(--text-dim)">Komentar komik</td><td id="dbComments" class="stat-val loading" style="font-size:.72rem">-</td></tr>
             <tr><td>ad_placements</td><td style="font-size:.68rem;color:var(--text-dim)">Slot iklan</td><td id="dbAds" class="stat-val loading" style="font-size:.72rem">-</td></tr>
             <tr><td>site_settings</td><td style="font-size:.68rem;color:var(--text-dim)">Konfigurasi</td><td id="dbSettings" class="stat-val loading" style="font-size:.72rem">-</td></tr>
+            <tr><td>api_analytics</td><td style="font-size:.68rem;color:var(--text-dim)">Log request</td><td id="dbAnalytics" class="stat-val loading" style="font-size:.72rem">-</td></tr>
           </tbody>
         </table>
         <div style="margin-top:1rem">
@@ -433,6 +556,7 @@
           <div class="ep-group-title">&#9656; Admin Panel &mdash; Requires Admin JWT</div>
           <div class="ep-list">
             <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/stats</span><div class="ep-info"><span class="ep-desc">Dashboard stats</span></div></div>
+            <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/analytics</span><div class="ep-info"><span class="ep-desc">Traffic &amp; analytics data</span></div></div>
             <div class="ep"><span class="method get">GET</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">List users</span></div></div>
             <div class="ep"><span class="method post">POST</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Buat user</span></div></div>
             <div class="ep"><span class="method patch">PATCH</span><span class="ep-path">/api/admin/users</span><div class="ep-info"><span class="ep-desc">Edit username</span></div></div>
@@ -500,7 +624,7 @@
     <!-- Footer -->
     <div class="footer">
       <div class="footer-l">Built with &#9829; by <span>KomikVerse</span> &middot; Express 5 + TypeScript + Neon Postgres</div>
-      <div class="footer-r">v2.0.0</div>
+      <div class="footer-r">v2.1.0</div>
     </div>
 
   </div>
@@ -770,7 +894,201 @@
 
     // Resize charts
     var resizeTimer;
-    window.addEventListener('resize',function(){clearTimeout(resizeTimer);resizeTimer=setTimeout(drawCharts,200)});
+    window.addEventListener('resize',function(){clearTimeout(resizeTimer);resizeTimer=setTimeout(function(){drawCharts();drawTrafficChart();drawProviderDonut()},200)});
+
+    // === Analytics ===
+    var analyticsData=null;
+    function fmtNum(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return String(n)}
+
+    fetch(API+'/admin/analytics').then(function(r){return r.json()}).then(function(d){
+      analyticsData=d;
+      // Stat cards
+      setVal('anVisitors',fmtNum(d.unique_visitors||0));
+      setVal('anRequests',fmtNum(d.total_requests||0));
+      setVal('anToday',fmtNum(d.today_requests||0));
+      setVal('anWeek',fmtNum(d.week_requests||0));
+      $('anTodayVisitors').textContent=fmtNum(d.today_visitors||0);
+      $('anWeekVisitors').textContent=fmtNum(d.week_visitors||0);
+      setVal('dbAnalytics',fmtNum(d.total_requests||0));
+
+      // Top endpoints
+      renderRankList('rankEndpoints',d.top_endpoints||[],'endpoint','count','var(--green)');
+      // Top providers
+      renderRankList('rankProviders',d.top_providers||[],'provider','count','var(--blue)');
+      // Recent requests feed
+      renderReqFeed(d.recent_requests||[]);
+      // Charts
+      drawTrafficChart();
+      drawProviderDonut();
+    }).catch(function(){
+      ['anVisitors','anRequests','anToday','anWeek'].forEach(function(id){setVal(id,'0')});
+      $('rankEndpoints').innerHTML='<div class="feed-loading">Belum ada data</div>';
+      $('rankProviders').innerHTML='<div class="feed-loading">Belum ada data</div>';
+      $('reqFeedList').innerHTML='<div class="feed-loading">Belum ada data</div>';
+    });
+
+    function renderRankList(containerId,items,nameKey,countKey,barColor){
+      var el=$(containerId);
+      if(!items.length){el.innerHTML='<div class="feed-loading">Belum ada data</div>';return}
+      var max=Math.max.apply(null,items.map(function(i){return parseInt(i[countKey])||0}))||1;
+      var html='';
+      items.forEach(function(item,idx){
+        var count=parseInt(item[countKey])||0;
+        var pct=Math.max(5,(count/max)*100);
+        var name=item[nameKey]||'-';
+        html+='<div class="rank-item"><span class="rank-pos">#'+(idx+1)+'</span>'
+          +'<span class="rank-name">'+name+'</span>'
+          +'<span class="rank-count">'+fmtNum(count)+'</span></div>';
+      });
+      el.innerHTML=html;
+    }
+
+    function renderReqFeed(items){
+      var el=$('reqFeedList');
+      if(!items.length){el.innerHTML='<div class="feed-loading">Belum ada request</div>';return}
+      var html='';
+      var countryFlags={'ID':'🇮🇩','US':'🇺🇸','SG':'🇸🇬','JP':'🇯🇵','MY':'🇲🇾','GB':'🇬🇧','AU':'🇦🇺','IN':'🇮🇳','KR':'🇰🇷','DE':'🇩🇪','FR':'🇫🇷','NL':'🇳🇱','CA':'🇨🇦','BR':'🇧🇷','TH':'🇹🇭','PH':'🇵🇭','VN':'🇻🇳','TW':'🇹🇼','HK':'🇭🇰'};
+      items.forEach(function(r){
+        var flag=r.country&&countryFlags[r.country]?countryFlags[r.country]:'🌐';
+        html+='<div class="req-item">'
+          +'<span class="req-method">GET</span>'
+          +'<span class="req-path">'+r.endpoint+'</span>'
+          +'<span class="req-prov">'+(r.provider||'-')+'</span>'
+          +'<span class="req-country">'+flag+'</span>'
+          +'<span class="req-time">'+timeAgo(r.created_at)+'</span>'
+          +'</div>';
+      });
+      el.innerHTML=html;
+    }
+
+    function drawTrafficChart(){
+      var canvas=$('chartTraffic');
+      if(!canvas||!analyticsData||!analyticsData.daily_30d) return;
+      var ctx=canvas.getContext('2d');
+      var dpr=window.devicePixelRatio||1;
+      var rect=canvas.parentElement.getBoundingClientRect();
+      canvas.width=rect.width*dpr;
+      canvas.height=rect.height*dpr;
+      ctx.scale(dpr,dpr);
+      var W=rect.width,H=rect.height;
+      var data=analyticsData.daily_30d;
+      if(!data.length) {
+        ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='13px Inter';ctx.textAlign='center';
+        ctx.fillText('Belum ada data traffic',W/2,H/2);return;
+      }
+      var pad={t:20,b:40,l:45,r:15};
+      var cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+      var maxReq=Math.max.apply(null,data.map(function(d){return parseInt(d.count)||0}))||1;
+      var maxVis=Math.max.apply(null,data.map(function(d){return parseInt(d.visitors)||0}))||1;
+      var maxVal=Math.max(maxReq,maxVis);
+
+      ctx.clearRect(0,0,W,H);
+
+      // Grid
+      for(var i=0;i<=4;i++){
+        var y=pad.t+cH*(1-i/4);
+        ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+        ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='9px JetBrains Mono';ctx.textAlign='right';
+        ctx.fillText(Math.round(maxVal*i/4),pad.l-6,y+3);
+      }
+
+      var step=cW/(data.length-1||1);
+
+      // Area fill for requests
+      ctx.beginPath();
+      ctx.moveTo(pad.l,pad.t+cH);
+      data.forEach(function(d,idx){
+        var x=pad.l+idx*step;
+        var y=pad.t+cH-(parseInt(d.count)/maxVal)*cH;
+        if(idx===0)ctx.lineTo(x,y);else ctx.lineTo(x,y);
+      });
+      ctx.lineTo(pad.l+(data.length-1)*step,pad.t+cH);
+      ctx.closePath();
+      var grad=ctx.createLinearGradient(0,pad.t,0,pad.t+cH);
+      grad.addColorStop(0,'rgba(52,211,153,.2)');grad.addColorStop(1,'rgba(52,211,153,.01)');
+      ctx.fillStyle=grad;ctx.fill();
+
+      // Requests line
+      ctx.beginPath();ctx.strokeStyle='#34d399';ctx.lineWidth=2;ctx.lineJoin='round';
+      data.forEach(function(d,idx){
+        var x=pad.l+idx*step;
+        var y=pad.t+cH-(parseInt(d.count)/maxVal)*cH;
+        if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+
+      // Visitors line
+      ctx.beginPath();ctx.strokeStyle='#60a5fa';ctx.lineWidth=2;ctx.lineJoin='round';
+      ctx.setLineDash([4,3]);
+      data.forEach(function(d,idx){
+        var x=pad.l+idx*step;
+        var y=pad.t+cH-(parseInt(d.visitors||0)/maxVal)*cH;
+        if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Dots on request line
+      data.forEach(function(d,idx){
+        var x=pad.l+idx*step;
+        var y=pad.t+cH-(parseInt(d.count)/maxVal)*cH;
+        ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fillStyle='#34d399';ctx.fill();
+      });
+
+      // X-axis labels (every ~5 days)
+      var labelStep=Math.max(1,Math.floor(data.length/6));
+      ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='9px Inter';ctx.textAlign='center';
+      data.forEach(function(d,idx){
+        if(idx%labelStep===0||idx===data.length-1){
+          var x=pad.l+idx*step;
+          var dt=new Date(d.date);
+          ctx.fillText(dt.getDate()+'/'+(dt.getMonth()+1),x,H-12);
+        }
+      });
+
+      // Legend
+      ctx.fillStyle='#34d399';ctx.beginPath();ctx.arc(W-180,14,4,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.5)';ctx.font='10px Inter';ctx.textAlign='left';
+      ctx.fillText('Requests',W-172,17);
+      ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.arc(W-100,14,4,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.5)';
+      ctx.fillText('Visitors',W-92,17);
+    }
+
+    function drawProviderDonut(){
+      var canvas=$('chartProviders');
+      if(!canvas||!analyticsData||!analyticsData.top_providers) return;
+      var ctx=canvas.getContext('2d');
+      var dpr=window.devicePixelRatio||1;
+      var rect=canvas.parentElement.getBoundingClientRect();
+      canvas.width=rect.width*dpr;
+      canvas.height=rect.height*dpr;
+      ctx.scale(dpr,dpr);
+      var W=rect.width,H=rect.height;
+      var data=analyticsData.top_providers;
+      if(!data.length)return;
+
+      var colors={'shinigami':'#f97316','komiku':'#60a5fa','kiryuu':'#34d399'};
+      var total=data.reduce(function(s,d){return s+(parseInt(d.count)||0)},0)||1;
+      var cx=W/2,cy=H/2,R=Math.min(cx,cy)-15,r=R*0.5;
+
+      ctx.clearRect(0,0,W,H);
+      var angle=-Math.PI/2;
+      data.forEach(function(d){
+        var count=parseInt(d.count)||0;
+        var sweep=(count/total)*Math.PI*2;
+        ctx.beginPath();ctx.arc(cx,cy,R,angle,angle+sweep);ctx.arc(cx,cy,r,angle+sweep,angle,true);ctx.closePath();
+        ctx.fillStyle=colors[d.provider]||'#888';ctx.fill();
+        angle+=sweep;
+      });
+
+      // Center
+      ctx.fillStyle='#fff';ctx.font='bold 16px Inter';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(fmtNum(total),cx,cy-3);
+      ctx.fillStyle='rgba(255,255,255,.4)';ctx.font='9px Inter';
+      ctx.fillText('Total',cx,cy+11);
+    }
   </script>
 </body>
 </html>
