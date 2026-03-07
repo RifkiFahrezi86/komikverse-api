@@ -284,7 +284,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const daysAgo = Math.floor(Math.random() * 150);
         const hoursAgo = Math.floor(Math.random() * 24);
         const createdAt = new Date(Date.now() - daysAgo * 86400000 - hoursAgo * 3600000).toISOString();
-        const status = Math.random() < 0.85 ? "approved" : "pending";
+        const status = "approved";
         try {
           await _query(
             `INSERT INTO comments (user_id, comic_slug, comic_title, content, status, created_at) 
@@ -305,27 +305,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ─── Seed Cleanup (DELETE /api/admin/seed) ───
     if (resource === "seed" && req.method === "DELETE") {
-      // Delete all comments from old hardcoded slugs
-      const OLD_SLUGS = [
-        "solo-leveling","one-piece","tower-of-god","the-beginning-after-the-end",
-        "omniscient-reader","martial-peak","return-of-the-mount-hua-sect","nano-machine",
-        "eleceed","windbreaker","legend-of-the-northern-blade","the-great-mage-returns",
-        "overgeared","doom-breaker","teenage-mercenary","komik-sample"
-      ];
-      const placeholders = OLD_SLUGS.map((_, i) => `$${i + 1}`).join(",");
-      const delComments = await _query(
-        `DELETE FROM comments WHERE comic_slug IN (${placeholders}) RETURNING id`,
-        OLD_SLUGS
+      // Delete all comments from fake users (password_hash matches fakeuser123)
+      const fakeUsers = await _query(
+        "SELECT id FROM users WHERE role = 'user' AND email LIKE '%@gmail.com' AND id NOT IN (SELECT DISTINCT user_id FROM comments WHERE user_id IN (SELECT id FROM users WHERE role = 'admin'))"
       );
+      const fakeIds = fakeUsers.map((u: any) => u.id);
 
-      // Delete orphaned fake users (non-admin users with no comments remaining)
+      let delComments = 0;
+      if (fakeIds.length > 0) {
+        const placeholders = fakeIds.map((_: any, i: number) => `$${i + 1}`).join(",");
+        const del = await _query(
+          `DELETE FROM comments WHERE user_id IN (${placeholders}) RETURNING id`,
+          fakeIds
+        );
+        delComments = del.length;
+      }
+
+      // Delete orphaned non-admin users with no comments
       const delUsers = await _query(
         `DELETE FROM users WHERE role = 'user' AND id NOT IN (SELECT DISTINCT user_id FROM comments) RETURNING id`
       );
 
       return res.status(200).json({
         success: true,
-        comments_deleted: delComments.length,
+        comments_deleted: delComments,
         users_deleted: delUsers.length,
       });
     }
