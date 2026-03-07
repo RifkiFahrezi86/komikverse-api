@@ -331,7 +331,7 @@ const shinigamiHandlers: Record<string, (query: any, slug?: string) => Promise<a
     const aniStatus = await fetchAniListStatus(comic.title);
     if (aniStatus !== "Unknown") comic.status = aniStatus;
     // Cross-provider chapter merge: fill missing early chapters from other providers
-    comic.chapters = await mergeChaptersFromOtherProviders(comic.chapters, comic.title, "shinigami");
+    comic.chapters = await mergeChaptersFromOtherProviders(comic.chapters, comic.title, "shinigami", comic.alternative);
     return apiResponse(comic);
   },
 
@@ -475,7 +475,8 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     const aniStatus = await fetchAniListStatus(title);
     const finalStatus = aniStatus !== "Unknown" ? aniStatus : (status === "End" || status === "Tamat" ? "Completed" : status);
     // Cross-provider chapter merge: fill missing early chapters from other providers
-    const mergedChapters = await mergeChaptersFromOtherProviders(uniqueChapters, title, "komiku");
+    const altTitles = infoTable["judul indonesia"] || infoTable["nama lain"] || "";
+    const mergedChapters = await mergeChaptersFromOtherProviders(uniqueChapters, title, "komiku", altTitles);
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status: finalStatus, author,
       genre: uniqueGenres, chapters: mergedChapters,
@@ -757,7 +758,8 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     const aniStatus = await fetchAniListStatus(title);
     if (aniStatus !== "Unknown") status = aniStatus;
     // Cross-provider chapter merge: fill missing early chapters from other providers
-    const mergedChapters = await mergeChaptersFromOtherProviders(chapters, title, "kiryuu");
+    const altText = $("h4 span.font-semibold").filter((_, el) => $(el).text().trim().toLowerCase().includes("alternative")).closest("div").find("p").text().trim();
+    const mergedChapters = await mergeChaptersFromOtherProviders(chapters, title, "kiryuu", altText);
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status, author, artist,
       genre: genres, rating: rating || undefined, chapters: mergedChapters, released,
@@ -882,7 +884,8 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
 async function mergeChaptersFromOtherProviders(
   primaryChapters: any[],
   comicTitle: string,
-  currentProvider: string
+  currentProvider: string,
+  alternativeTitles?: string
 ): Promise<any[]> {
   if (!comicTitle || primaryChapters.length === 0) return primaryChapters;
 
@@ -901,6 +904,17 @@ async function mergeChaptersFromOtherProviders(
   const expectedCount = maxChapter - minChapter + 1;
   const hasGaps = numbers.length < expectedCount * 0.7;
 
+  // Build list of titles to try: primary title + alternative titles
+  const titlesToTry = [comicTitle];
+  if (alternativeTitles) {
+    const alts = alternativeTitles.split(",").map(s => s.trim()).filter(s => s && !/[\u4e00-\u9fff\u3400-\u4dbf]/.test(s));
+    for (const alt of alts) {
+      if (!titlesToTry.some(t => t.toLowerCase() === alt.toLowerCase())) {
+        titlesToTry.push(alt);
+      }
+    }
+  }
+
   const otherProviders = ["komiku", "kiryuu", "shinigami"].filter(p => p !== currentProvider);
   const existingNumbers = new Set(numbers);
 
@@ -908,12 +922,16 @@ async function mergeChaptersFromOtherProviders(
     try {
       let fallbackChapters: any[] = [];
 
-      if (fallbackProvider === "komiku") {
-        fallbackChapters = await fetchKomikuChaptersForMerge(comicTitle);
-      } else if (fallbackProvider === "kiryuu") {
-        fallbackChapters = await fetchKiryuuChaptersForMerge(comicTitle);
-      } else if (fallbackProvider === "shinigami") {
-        fallbackChapters = await fetchShinigamiChaptersForMerge(comicTitle);
+      // Try each title until we find chapters
+      for (const searchTitle of titlesToTry) {
+        if (fallbackProvider === "komiku") {
+          fallbackChapters = await fetchKomikuChaptersForMerge(searchTitle);
+        } else if (fallbackProvider === "kiryuu") {
+          fallbackChapters = await fetchKiryuuChaptersForMerge(searchTitle);
+        } else if (fallbackProvider === "shinigami") {
+          fallbackChapters = await fetchShinigamiChaptersForMerge(searchTitle);
+        }
+        if (fallbackChapters.length > 0) break;
       }
 
       if (fallbackChapters.length === 0) continue;
