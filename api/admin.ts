@@ -359,46 +359,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const userCount = Math.min(Math.max(parseInt(body.user_count) || 100, 10), 200);
         const commentCount = Math.min(Math.max(parseInt(body.comment_count) || 120, 10), 500);
 
-        // Create fake users
+        // Auto-clean old seed data first to avoid conflicts
+        await _query("DELETE FROM comments WHERE is_seed = true");
+        await _query("DELETE FROM users WHERE is_seed = true");
+
+        // Hash password ONCE instead of 100 times (biggest perf win)
+        const seedHash = await _bcrypt.hash("seedpass123", 4);
+
+        // Generate unique names
         const usedNames = new Set<string>();
-        const createdUserIds: number[] = [];
+        const userData: { name: string; email: string }[] = [];
+        const ts = Date.now();
         for (let i = 0; i < userCount; i++) {
           let name = pickRandom(FAKE_NAMES);
-          // Ensure unique by appending number if needed
-          while (usedNames.has(name)) {
-            name = pickRandom(FAKE_NAMES) + Math.floor(Math.random() * 999);
-          }
+          if (usedNames.has(name)) name = name + Math.floor(Math.random() * 9999);
+          while (usedNames.has(name)) name = pickRandom(FAKE_NAMES) + Math.floor(Math.random() * 99999);
           usedNames.add(name);
-          const username = name.replace(/\s+/g, "").toLowerCase().slice(0, 50);
-          const email = username + i + "@fakeseed.local";
-          const hash = await _bcrypt.hash("seedpass123", 4); // fast low-cost hash
-          try {
-            const row = await _query(
-              "INSERT INTO users (username, email, password_hash, role, is_seed) VALUES ($1, $2, $3, 'user', true) RETURNING id",
-              [name, email, hash]
-            );
-            createdUserIds.push(row[0].id);
-          } catch { /* skip duplicates */ }
+          userData.push({ name, email: name.replace(/\s+/g, "").toLowerCase() + i + "_" + ts + "@seed.local" });
         }
 
-        // Create fake comments spread across random comics
-        let commentsCreated = 0;
-        for (let i = 0; i < commentCount; i++) {
-          const userId = pickRandom(createdUserIds.length > 0 ? createdUserIds : [admin.id]);
-          const slug = pickRandom(COMIC_SLUGS);
-          const title = COMIC_TITLES[slug] || slug;
-          const content = pickRandom(FAKE_COMMENTS);
-          // Random date within last 90 days
-          const daysAgo = Math.floor(Math.random() * 90);
-          const hoursAgo = Math.floor(Math.random() * 24);
+        // Batch INSERT users (25 per query instead of 100 individual queries)
+        const BATCH = 25;
+        const createdUserIds: number[] = [];
+        for (let b = 0; b < userData.length; b += BATCH) {
+          const chunk = userData.slice(b, b + BATCH);
+          const values: string[] = [];
+          const params: unknown[] = [];
+          let p = 1;
+          for (const u of chunk) {
+            values.push(`($${p}, $${p + 1}, $${p + 2}, 'user', true)`);
+            params.push(u.name, u.email, seedHash);
+            p += 3;
+          }
           try {
-            await _query(
-              `INSERT INTO comments (user_id, comic_slug, comic_title, content, status, is_seed, created_at)
-               VALUES ($1, $2, $3, $4, 'approved', true, NOW() - INTERVAL '${daysAgo} days' - INTERVAL '${hoursAgo} hours')`,
-              [userId, slug, title, content]
+            const rows = await _query(
+              `INSERT INTO users (username, email, password_hash, role, is_seed) VALUES ${values.join(", ")} RETURNING id`,
+              params
             );
-            commentsCreated++;
-          } catch { /* skip errors */ }
+            for (const r of rows) createdUserIds.push(r.id);
+          } catch (e) { console.error("Seed user batch error:", e); }
+        }
+
+        // Batch INSERT comments (25 per query instead of 120 individual queries)
+        let commentsCreated = 0;
+        const pool = createdUserIds.length > 0 ? createdUserIds : [admin.id];
+        for (let b = 0; b < commentCount; b += BATCH) {
+          const end = Math.min(b + BATCH, commentCount);
+          const count = end - b;
+          const values: string[] = [];
+          const params: unknown[] = [];
+          let p = 1;
+          for (let i = 0; i < count; i++) {
+            const userId = pickRandom(pool);
+            const slug = pickRandom(COMIC_SLUGS);
+            const title = COMIC_TITLES[slug] || slug;
+            const content = pickRandom(FAKE_COMMENTS);
+            const msAgo = (Math.floor(Math.random() * 90) * 86400 + Math.floor(Math.random() * 86400)) * 1000;
+            const createdAt = new Date(Date.now() - msAgo).toISOString();
+            values.push(`($${p}, $${p + 1}, $${p + 2}, $${p + 3}, 'approved', true, $${p + 4})`);
+            params.push(userId, slug, title, content, createdAt);
+            p += 5;
+          }
+          try {
+            const rows = await _query(
+              `INSERT INTO comments (user_id, comic_slug, comic_title, content, status, is_seed, created_at) VALUES ${values.join(", ")} RETURNING id`,
+              params
+            );
+            commentsCreated += rows.length;
+          } catch (e) { console.error("Seed comment batch error:", e); }
         }
 
         return res.status(201).json({
@@ -410,10 +438,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // DELETE — remove all seed data
       if (req.method === "DELETE") {
-        const [delComments] = await Promise.all([
-          _query("DELETE FROM comments WHERE is_seed = true"),
-        ]);
-        const delUsers = await _query("DELETE FROM users WHERE is_seed = true");
+        const delComments = await _query("DELETE FROM comments WHERE is_seed = true RETURNING id");
+        const delUsers = await _query("DELETE FROM users WHERE is_seed = true RETURNING id");
         return res.status(200).json({
           success: true,
           deleted_comments: delComments?.length ?? 0,
