@@ -801,30 +801,70 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
   genre: async (query, slug) => {
     if (slug) {
       const page = parseInt(query.page) || 1;
-      const $ = await fetchHTML(`${KIRYUU_BASE}/genre/${slug}/page/${page}/`);
-      return apiResponse(kiryuuParseListPage($));
-    }
-    const $ = await fetchHTML(`${KIRYUU_BASE}/manga/`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const genres: any[] = [];
-    $("a[href*='/genre/']").each((_, el) => {
-      const t = $(el).find("span").text().trim() || $(el).text().trim();
-      const h = ($(el).attr("href") || "").replace(/https?:\/\/v1\.kiryuu\.to/, "").replace(/\/$/, "");
-      const genreSlug = h.replace(/^\/genre\//, "");
-      if (t && genreSlug && !genres.find(g => g.href === `/genre/${genreSlug}`)) {
-        genres.push({ title: t, href: `/genre/${genreSlug}` });
+      // Use WP REST API to find genre term ID by slug, then fetch manga
+      try {
+        const genreRes = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/genre?slug=${encodeURIComponent(slug)}&_fields=id`, {
+          headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
+        });
+        if (!genreRes.ok) throw new Error("Genre not found");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const genreData: any[] = await genreRes.json();
+        if (!genreData.length) throw new Error("Genre not found");
+        const genreId = genreData[0].id;
+        const mangaRes = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?genre=${genreId}&per_page=20&page=${page}&_embed=wp:term,wp:featuredmedia`, {
+          headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
+        });
+        if (!mangaRes.ok) throw new Error("Failed to fetch manga");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mangaData: any[] = await mangaRes.json();
+        const totalPages = parseInt(mangaRes.headers.get("x-wp-totalpages") || "1");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const comics = mangaData.map((m: any) => {
+          const thumb = m._embedded?.["wp:featuredmedia"]?.[0]?.source_url || "";
+          let type = "Manga";
+          const terms = m._embedded?.["wp:term"] || [];
+          for (const group of terms) {
+            for (const term of group) {
+              if (term.taxonomy === "type" && term.name && term.name !== "-") type = term.name;
+            }
+          }
+          return {
+            title: m.title?.rendered || "",
+            thumbnail: thumb, image: thumb,
+            href: `/manga/${m.slug}`,
+            type,
+          };
+        });
+        return apiResponse(comics, { current_page: page, length_page: totalPages, has_next: page < totalPages, has_prev: page > 1 });
+      } catch {
+        // Fallback to HTML scraping
+        const $ = await fetchHTML(`${KIRYUU_BASE}/genre/${slug}/page/${page}/`);
+        const comics = kiryuuParseListPage($);
+        if (comics.length > 0) return apiResponse(comics);
+        return apiResponse([]);
       }
-    });
-    if (genres.length === 0) {
-      const fallback = ["action","adventure","comedy","drama","fantasy","harem","horror","isekai",
-        "martial-arts","mystery","psychological","romance","school-life","sci-fi","seinen",
-        "shoujo","shounen","slice-of-life","sports","supernatural","thriller","tragedy"];
-      return apiResponse(fallback.map(g => ({
-        title: g.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
-        href: `/genre/${g}`,
-      })));
     }
-    return apiResponse(genres);
+    // Genre list — use WP REST API
+    try {
+      const res = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/genre?per_page=100&_fields=slug,name,count&orderby=count&order=desc`, {
+        headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
+      });
+      if (!res.ok) throw new Error("Failed");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any[] = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const genres = data.filter((g: any) => g.count > 0).map((g: any) => ({
+        title: g.name, href: `/genre/${g.slug}`,
+      }));
+      if (genres.length > 0) return apiResponse(genres);
+    } catch { /* fallback */ }
+    const fallback = ["action","adventure","comedy","drama","fantasy","harem","horror","isekai",
+      "martial-arts","mystery","psychological","romance","school-life","sci-fi","seinen",
+      "shoujo","shounen","slice-of-life","sports","supernatural","thriller","tragedy"];
+    return apiResponse(fallback.map(g => ({
+      title: g.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+      href: `/genre/${g}`,
+    })));
   },
 
   health: async () => ({ status: "ok", provider: "kiryuu", timestamp: new Date().toISOString() }),
@@ -891,8 +931,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json(apiError("Invalid parameter", 400));
     }
 
-    // Validate query params
-    for (const [, val] of Object.entries(req.query)) {
+    // Validate query params (skip 'path' — Vercel rewrite artifact, not user input)
+    for (const [key, val] of Object.entries(req.query)) {
+      if (key === "path") continue;
       const v = Array.isArray(val) ? val[0] : val;
       if (typeof v === "string" && !isSafeInput(v)) {
         return res.status(400).json(apiError("Invalid input detected", 400));
