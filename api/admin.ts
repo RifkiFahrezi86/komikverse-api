@@ -237,6 +237,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recentRequests,
       weekRequests,
       weekVisitors,
+      topComics,
+      recentComicClicks,
+      recentVisitors,
     ] = await Promise.all([
       _query("SELECT COUNT(*) as count FROM api_analytics"),
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics"),
@@ -255,6 +258,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               FROM api_analytics ORDER BY created_at DESC LIMIT 20`),
       _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
+      _query(`SELECT endpoint, COUNT(*) as count, COUNT(DISTINCT ip_hash) as unique_viewers 
+              FROM api_analytics WHERE endpoint LIKE '/detail/%' 
+              GROUP BY endpoint ORDER BY count DESC LIMIT 15`),
+      _query(`SELECT ip_hash, endpoint, provider, country, user_agent, created_at 
+              FROM api_analytics WHERE endpoint LIKE '/detail/%' 
+              ORDER BY created_at DESC LIMIT 30`),
+      _query(`SELECT ip_hash, COUNT(*) as total_requests,
+                     COUNT(DISTINCT endpoint) as pages_viewed,
+                     COUNT(CASE WHEN endpoint LIKE '/detail/%' THEN 1 END) as comic_clicks,
+                     MAX(created_at) as last_seen,
+                     MIN(created_at) as first_seen,
+                     MAX(country) as country,
+                     MAX(user_agent) as user_agent
+              FROM api_analytics 
+              GROUP BY ip_hash 
+              ORDER BY last_seen DESC LIMIT 30`),
     ]);
 
     return res.status(200).json({
@@ -270,6 +289,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hourly_today: hourlyStats,
       daily_30d: dailyStats,
       recent_requests: recentRequests,
+      top_comics: topComics,
+      recent_comic_clicks: recentComicClicks,
+      recent_visitors: recentVisitors,
     });
   }
 
