@@ -205,6 +205,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
   await loadAll();
 
+  // Analytics endpoint — public (no auth required) for dashboard
+  const earlyPath = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
+  const earlyResource = earlyPath.split("/")[0] || "";
+  if (earlyResource === "analytics" && req.method === "GET") {
+    try {
+      await _query(`
+        CREATE TABLE IF NOT EXISTS api_analytics (
+          id SERIAL PRIMARY KEY,
+          ip_hash VARCHAR(64) NOT NULL,
+          endpoint VARCHAR(255) NOT NULL,
+          provider VARCHAR(50),
+          user_agent TEXT,
+          referer TEXT,
+          country VARCHAR(10),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+      `);
+    } catch { /* ignore */ }
+
+    const [
+      totalRequests,
+      uniqueVisitors,
+      todayRequests,
+      todayVisitors,
+      topEndpoints,
+      topProviders,
+      topCountries,
+      hourlyStats,
+      dailyStats,
+      recentRequests,
+      weekRequests,
+      weekVisitors,
+    ] = await Promise.all([
+      _query("SELECT COUNT(*) as count FROM api_analytics"),
+      _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics"),
+      _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
+      _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
+      _query("SELECT endpoint, COUNT(*) as count FROM api_analytics GROUP BY endpoint ORDER BY count DESC LIMIT 10"),
+      _query("SELECT provider, COUNT(*) as count FROM api_analytics WHERE provider IS NOT NULL GROUP BY provider ORDER BY count DESC"),
+      _query("SELECT country, COUNT(*) as count FROM api_analytics WHERE country IS NOT NULL AND country != '' GROUP BY country ORDER BY count DESC LIMIT 10"),
+      _query(`SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count 
+              FROM api_analytics WHERE created_at >= CURRENT_DATE 
+              GROUP BY hour ORDER BY hour`),
+      _query(`SELECT DATE(created_at) as date, COUNT(*) as count, COUNT(DISTINCT ip_hash) as visitors 
+              FROM api_analytics WHERE created_at >= NOW() - INTERVAL '30 days' 
+              GROUP BY date ORDER BY date`),
+      _query(`SELECT endpoint, provider, country, created_at 
+              FROM api_analytics ORDER BY created_at DESC LIMIT 20`),
+      _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
+      _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
+    ]);
+
+    return res.status(200).json({
+      total_requests: parseInt(totalRequests[0]?.count || "0"),
+      unique_visitors: parseInt(uniqueVisitors[0]?.count || "0"),
+      today_requests: parseInt(todayRequests[0]?.count || "0"),
+      today_visitors: parseInt(todayVisitors[0]?.count || "0"),
+      week_requests: parseInt(weekRequests[0]?.count || "0"),
+      week_visitors: parseInt(weekVisitors[0]?.count || "0"),
+      top_endpoints: topEndpoints,
+      top_providers: topProviders,
+      top_countries: topCountries,
+      hourly_today: hourlyStats,
+      daily_30d: dailyStats,
+      recent_requests: recentRequests,
+    });
+  }
+
   const admin = getAdmin(req);
   if (!admin) return res.status(403).json({ error: "Admin access required" });
 
@@ -237,73 +305,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           seed_users: parseInt(seedUsers[0].count),
         },
         recent_comments: recentComments,
-      });
-    }
-
-    // ─── Analytics ───
-    if (resource === "analytics" && req.method === "GET") {
-      // Auto-create table if not exists
-      try {
-        await _query(`
-          CREATE TABLE IF NOT EXISTS api_analytics (
-            id SERIAL PRIMARY KEY,
-            ip_hash VARCHAR(64) NOT NULL,
-            endpoint VARCHAR(255) NOT NULL,
-            provider VARCHAR(50),
-            user_agent TEXT,
-            referer TEXT,
-            country VARCHAR(10),
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          )
-        `);
-      } catch { /* ignore */ }
-
-      const [
-        totalRequests,
-        uniqueVisitors,
-        todayRequests,
-        todayVisitors,
-        topEndpoints,
-        topProviders,
-        topCountries,
-        hourlyStats,
-        dailyStats,
-        recentRequests,
-        weekRequests,
-        weekVisitors,
-      ] = await Promise.all([
-        _query("SELECT COUNT(*) as count FROM api_analytics"),
-        _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics"),
-        _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
-        _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
-        _query("SELECT endpoint, COUNT(*) as count FROM api_analytics GROUP BY endpoint ORDER BY count DESC LIMIT 10"),
-        _query("SELECT provider, COUNT(*) as count FROM api_analytics WHERE provider IS NOT NULL GROUP BY provider ORDER BY count DESC"),
-        _query("SELECT country, COUNT(*) as count FROM api_analytics WHERE country IS NOT NULL AND country != '' GROUP BY country ORDER BY count DESC LIMIT 10"),
-        _query(`SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count 
-                FROM api_analytics WHERE created_at >= CURRENT_DATE 
-                GROUP BY hour ORDER BY hour`),
-        _query(`SELECT DATE(created_at) as date, COUNT(*) as count, COUNT(DISTINCT ip_hash) as visitors 
-                FROM api_analytics WHERE created_at >= NOW() - INTERVAL '30 days' 
-                GROUP BY date ORDER BY date`),
-        _query(`SELECT endpoint, provider, country, created_at 
-                FROM api_analytics ORDER BY created_at DESC LIMIT 20`),
-        _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
-        _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
-      ]);
-
-      return res.status(200).json({
-        total_requests: parseInt(totalRequests[0]?.count || "0"),
-        unique_visitors: parseInt(uniqueVisitors[0]?.count || "0"),
-        today_requests: parseInt(todayRequests[0]?.count || "0"),
-        today_visitors: parseInt(todayVisitors[0]?.count || "0"),
-        week_requests: parseInt(weekRequests[0]?.count || "0"),
-        week_visitors: parseInt(weekVisitors[0]?.count || "0"),
-        top_endpoints: topEndpoints,
-        top_providers: topProviders,
-        top_countries: topCountries,
-        hourly_today: hourlyStats,
-        daily_30d: dailyStats,
-        recent_requests: recentRequests,
       });
     }
 
