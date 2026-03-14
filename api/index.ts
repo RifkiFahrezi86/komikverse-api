@@ -154,18 +154,26 @@ async function getGenreList() {
 // ─── Transformers ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getTypeFromCountry(c: string) {
-  return c === "KR" ? "Manhwa" : c === "CN" ? "Manhua" : "Manga";
+  const u = c.toUpperCase();
+  return u === "KR" ? "Manhwa" : u === "CN" ? "Manhua" : "Manga";
 }
 
 function resolveComicType(m: any): string {
-  // country_id is the most reliable source for type
-  if (m.country_id === "KR") return "Manhwa";
-  if (m.country_id === "CN") return "Manhua";
-  if (m.country_id === "JP") return "Manga";
-  // Fallback to Format taxonomy, then country lookup
+  // country_id is the most reliable source — normalize to uppercase for comparison
+  const cid = (m.country_id || "").toUpperCase();
+  if (cid === "KR") return "Manhwa";
+  if (cid === "CN") return "Manhua";
+  if (cid === "JP") return "Manga";
+  // Fallback to Format taxonomy
   const formatName = m.taxonomy?.Format?.[0]?.name;
-  if (formatName && /^(Manhwa|Manhua|Manga)$/i.test(formatName)) return formatName;
-  return m.country_id ? getTypeFromCountry(m.country_id) : "Manga";
+  if (formatName && /^(Manhwa|Manhua|Manga)$/i.test(formatName)) {
+    return formatName.charAt(0).toUpperCase() + formatName.slice(1).toLowerCase();
+  }
+  // Fallback to alternative_title language detection
+  const alt = m.alternative_title || "";
+  if (/[\uAC00-\uD7AF]/.test(alt)) return "Manhwa"; // Korean characters
+  if (/[\u4E00-\u9FFF]/.test(alt) && !/[\u3040-\u309F\u30A0-\u30FF]/.test(alt)) return "Manhua"; // Chinese without Japanese kana
+  return cid ? getTypeFromCountry(cid) : "Manga";
 }
 function getStatusText(s: number) {
   return s === 1 ? "Ongoing" : s === 2 ? "Completed" : s === 3 ? "Hiatus" : "Unknown";
@@ -625,9 +633,10 @@ async function kiryuuResolveTypes(comics: any[]): Promise<any[]> {
       }
     }
   } catch { /* fallback to existing types */ }
-  // Clean up internal slug field
+  // Clean up internal slug field and default missing types to "Manga"
   for (const c of comics) {
     delete c._slug;
+    if (!c.type) c.type = "Manga";
   }
   return comics;
 }
