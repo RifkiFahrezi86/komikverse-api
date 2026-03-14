@@ -2,524 +2,552 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>KomikVerse API — Dashboard</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>KomikVerse API - Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>K</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    :root{
-      --bg:#0a0a0f;--card:#111118;--card-hover:#16161f;--border:rgba(255,255,255,.06);
-      --text:#f0f0f5;--text-sec:#a0a0b5;--text-dim:#606075;
-      --orange:#f97316;--blue:#60a5fa;--green:#34d399;--red:#f87171;--purple:#a78bfa;--cyan:#22d3ee;--yellow:#fbbf24;
-      --mono:'JetBrains Mono',monospace;--sans:'Inter',system-ui,sans-serif;
+    :root {
+      --bg: #0c0c14;
+      --card: #13131d;
+      --border: rgba(255,255,255,0.07);
+      --text: #eaeaf0;
+      --text-sec: #b0b0c5;
+      --text-dim: #707088;
+      --orange: #f97316;
+      --blue: #60a5fa;
+      --green: #34d399;
+      --red: #f87171;
+      --purple: #a78bfa;
+      --yellow: #fbbf24;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
     }
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
-    .container{max-width:1100px;margin:0 auto;padding:1.5rem}
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
 
-    /* Header */
-    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
-    .brand{display:flex;align-items:center;gap:.75rem}
-    .brand-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--orange),#ea580c);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;color:#fff}
-    .brand h1{font-size:1.2rem;font-weight:800;letter-spacing:-.02em}.brand h1 span{color:var(--orange)}
-    .brand-sub{font-size:.7rem;color:var(--text-dim);font-weight:500}
-    .status-pill{display:flex;align-items:center;gap:.4rem;padding:.35rem .75rem;border-radius:20px;background:var(--card);border:1px solid var(--border);font-size:.7rem;font-weight:600;color:var(--text-sec)}
-    .status-dot{width:7px;height:7px;border-radius:50%;background:#555}
-    .status-dot.online{background:var(--green);box-shadow:0 0 6px var(--green)}
-    .status-dot.offline{background:var(--red);box-shadow:0 0 6px var(--red)}
+    /* === HEADER === */
+    .hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-box { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--orange), #ea580c); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; color: #fff; }
+    .logo h1 { font-size: 22px; font-weight: 800; }
+    .logo h1 b { color: var(--orange); }
+    .logo-sub { font-size: 13px; color: var(--text-dim); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; background: var(--card); border: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--text-sec); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex-shrink: 0; }
+    .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .dot.off { background: var(--red); box-shadow: 0 0 8px var(--red); }
 
-    /* Section */
-    .section{margin-bottom:.5rem;margin-top:1.5rem}
-    .sec-head{display:flex;align-items:center;gap:.5rem}
-    .sec-title{font-size:.95rem;font-weight:700;color:var(--text)}
-    .sec-badge{font-size:.55rem;font-weight:700;padding:.2rem .5rem;border-radius:20px;background:rgba(52,211,153,.12);color:var(--green);text-transform:uppercase;letter-spacing:.04em}
+    /* === STATS === */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+    .st { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 16px; text-align: center; }
+    .st:hover { border-color: rgba(255,255,255,0.12); }
+    .st-num { font-size: 32px; font-weight: 800; margin-bottom: 4px; }
+    .st-num.c1 { color: var(--orange); }
+    .st-num.c2 { color: var(--blue); }
+    .st-num.c3 { color: var(--green); }
+    .st-num.c4 { color: var(--purple); }
+    .st-lbl { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+    .st-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+    .ld { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-    /* Stat Cards */
-    .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.5rem}
-    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;text-align:center;transition:border-color .2s}
-    .stat-card:hover{border-color:rgba(255,255,255,.1)}
-    .stat-val{font-size:1.6rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.15rem}
-    .stat-label{font-size:.68rem;color:var(--text-dim);font-weight:500}
-    .stat-sub{font-size:.6rem;color:var(--text-dim);margin-top:.2rem}
-    .stat-val.orange{color:var(--orange)}.stat-val.blue{color:var(--blue)}.stat-val.green{color:var(--green)}.stat-val.purple{color:var(--purple)}
-    .loading{animation:pulse 1.5s infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    /* === SECTION === */
+    .sec { margin-top: 28px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .sec-t { font-size: 17px; font-weight: 700; }
+    .badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: rgba(52,211,153,0.12); color: var(--green); text-transform: uppercase; letter-spacing: 0.5px; }
 
-    /* Provider Grid */
-    .prov-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:.5rem;margin-bottom:1.5rem}
-    .prov-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;position:relative;overflow:hidden}
-    .prov-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
-    .prov-card.shinigami::before{background:var(--orange)}
-    .prov-card.komiku::before{background:var(--blue)}
-    .prov-card.kiryuu::before{background:var(--green)}
-    .prov-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem}
-    .prov-name{font-size:.85rem;font-weight:700}
-    .prov-badge{font-size:.6rem;font-weight:600;padding:.2rem .5rem;border-radius:12px}
-    .prov-badge.checking{background:rgba(255,255,255,.05);color:var(--text-dim)}
-    .prov-badge.ok{background:rgba(52,211,153,.12);color:var(--green)}
-    .prov-badge.fail{background:rgba(248,113,113,.12);color:var(--red)}
-    .prov-info{font-size:.65rem;color:var(--text-dim);line-height:1.5}
-    .prov-info b{color:var(--text-sec)}
+    /* === PROVIDERS === */
+    .provs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+    .pv { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; position: relative; overflow: hidden; }
+    .pv::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .pv.s1::after { background: var(--orange); }
+    .pv.s2::after { background: var(--blue); }
+    .pv.s3::after { background: var(--green); }
+    .pv-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .pv-name { font-size: 16px; font-weight: 700; }
+    .pv-st { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; }
+    .pv-st.chk { background: rgba(255,255,255,0.04); color: var(--text-dim); }
+    .pv-st.ok { background: rgba(52,211,153,0.12); color: var(--green); }
+    .pv-st.err { background: rgba(248,113,113,0.12); color: var(--red); }
+    .pv-info { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+    .pv-info b { color: var(--text-sec); }
 
-    /* Table */
-    .data-table{width:100%;border-collapse:collapse;font-size:.72rem}
-    .data-table th{text-align:left;padding:.6rem .75rem;background:rgba(255,255,255,.02);color:var(--text-dim);font-weight:600;font-size:.65rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
-    .data-table td{padding:.55rem .75rem;border-bottom:1px solid var(--border);color:var(--text-sec);vertical-align:middle}
-    .data-table tr:hover td{background:rgba(255,255,255,.015)}
-    .data-table tr:last-child td{border-bottom:none}
+    /* === CHART === */
+    .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 28px; }
+    .chart-t { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .chart-s { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+    .chart-area { height: 200px; position: relative; }
+    .chart-area canvas { width: 100%; height: 100%; display: block; }
 
-    /* Card wrapper for tables */
-    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:.5rem;margin-bottom:1.5rem}
-    .card-body{padding:0}
+    /* === CARD === */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 24px; }
+    .card-hdr { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+    .card-hdr .sec-t { font-size: 15px; }
 
-    /* Two column layout */
-    .split{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.5rem;margin-bottom:1.5rem}
-    .split .card{margin:0}
+    /* === TABLE === */
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl th { text-align: left; padding: 10px 16px; background: rgba(255,255,255,0.02); color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    .tbl td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text-sec); font-size: 14px; }
+    .tbl tr:hover td { background: rgba(255,255,255,0.015); }
+    .tbl tr:last-child td { border-bottom: none; }
+    .hash { font-family: var(--mono); font-size: 13px; color: var(--purple); font-weight: 500; }
+    .comic-n { color: var(--orange); font-weight: 600; }
+    .tm { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+    .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 8px; }
+    .tag.v { background: rgba(96,165,250,0.1); color: var(--blue); }
+    .tag.k { background: rgba(249,115,22,0.1); color: var(--orange); }
 
-    /* Visitor row */
-    .visitor-device{font-size:.6rem;color:var(--text-dim);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .hash{font-family:var(--mono);font-size:.62rem;color:var(--purple);font-weight:500}
-    .comic-name{color:var(--orange);font-weight:500}
-    .time-ago{font-size:.62rem;color:var(--text-dim);white-space:nowrap}
-    .badge-sm{font-size:.55rem;font-weight:600;padding:.15rem .4rem;border-radius:8px;display:inline-block}
-    .badge-sm.views{background:rgba(96,165,250,.1);color:var(--blue)}
-    .badge-sm.clicks{background:rgba(249,115,22,.1);color:var(--orange)}
+    /* === TWO COL === */
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+    .row2 .card { margin-bottom: 0; }
 
-    /* Traffic chart */
-    .chart-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-top:.5rem;margin-bottom:1.5rem}
-    .chart-title{font-size:.8rem;font-weight:700;margin-bottom:.15rem}
-    .chart-sub{font-size:.62rem;color:var(--text-dim);margin-bottom:.5rem}
-    .chart-area{height:180px;position:relative}
-    .chart-area canvas{width:100%;height:100%;display:block}
+    /* === RANK === */
+    .rk { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+    .rk:hover { background: rgba(255,255,255,0.02); }
+    .rk-n { font-size: 12px; font-weight: 700; color: var(--text-dim); width: 24px; text-align: center; flex-shrink: 0; }
+    .rk-t { flex: 1; font-size: 14px; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rk-c { font-size: 14px; font-weight: 700; color: var(--text); flex-shrink: 0; }
 
-    /* Rank list */
-    .rank-item{display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;border-radius:6px}
-    .rank-item:hover{background:rgba(255,255,255,.02)}
-    .rank-pos{font-size:.6rem;font-weight:700;color:var(--text-dim);width:20px;text-align:center}
-    .rank-name{flex:1;font-size:.7rem;color:var(--text-sec);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .rank-count{font-size:.68rem;font-weight:700;color:var(--text)}
+    /* === FOOTER === */
+    .ftr { text-align: center; padding: 16px 0; margin-top: 8px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-dim); }
+    .ftr b { color: var(--orange); }
 
-    /* Footer */
-    .footer{text-align:center;padding:1rem 0;margin-top:.5rem;border-top:1px solid var(--border);font-size:.65rem;color:var(--text-dim)}
-    .footer span{color:var(--orange);font-weight:700}
+    .empty { text-align: center; padding: 32px 16px; color: var(--text-dim); font-size: 14px; }
 
-    /* Empty state */
-    .empty{text-align:center;padding:2rem 1rem;color:var(--text-dim);font-size:.75rem}
-
-    @media(max-width:768px){
-      .container{padding:1rem}
-      .stat-grid{grid-template-columns:repeat(2,1fr)}
-      .prov-grid{grid-template-columns:1fr}
-      .split{grid-template-columns:1fr}
-      .header{flex-direction:column;align-items:flex-start}
-      .data-table{font-size:.65rem}
-      .visitor-device{display:none}
+    /* === RESPONSIVE === */
+    @media (max-width: 900px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .provs { grid-template-columns: 1fr; }
+      .row2 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .wrap { padding: 16px 12px; }
+      .hdr { flex-direction: column; align-items: flex-start; }
+      .st-num { font-size: 26px; }
+      .tbl td, .tbl th { padding: 8px 12px; font-size: 13px; }
+      .hide-m { display: none; }
     }
   </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
 
   <!-- Header -->
-  <header class="header">
-    <div class="brand">
-      <div class="brand-icon">K</div>
+  <header class="hdr">
+    <div class="logo">
+      <div class="logo-box">K</div>
       <div>
-        <h1>Komik<span>Verse</span> API</h1>
-        <div class="brand-sub">Dashboard Monitoring</div>
+        <h1>Komik<b>Verse</b> API</h1>
+        <div class="logo-sub">Dashboard Monitoring</div>
       </div>
     </div>
-    <div class="status-pill">
-      <div class="status-dot" id="sDot"></div>
+    <div class="pill">
+      <div class="dot" id="sDot"></div>
       <span id="sText">Checking...</span>
-      <span id="sLatency" style="display:none;margin-left:.3rem;font-family:var(--mono);font-size:.6rem"></span>
+      <span id="sMs" style="display:none;font-family:var(--mono);font-size:12px"></span>
     </div>
   </header>
 
-  <!-- Stat Cards -->
-  <div class="stat-grid">
-    <div class="stat-card">
-      <div class="stat-val orange loading" id="vVisitors">--</div>
-      <div class="stat-label">Total Pengunjung</div>
-      <div class="stat-sub">Unik (IP hash)</div>
+  <!-- Stats -->
+  <div class="stats">
+    <div class="st">
+      <div class="st-num c1 ld" id="vVisit">--</div>
+      <div class="st-lbl">Total Pengunjung</div>
+      <div class="st-sub">Unik (IP hash)</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-val blue loading" id="vRequests">--</div>
-      <div class="stat-label">Total Requests</div>
-      <div class="stat-sub">Semua endpoint</div>
+    <div class="st">
+      <div class="st-num c2 ld" id="vReq">--</div>
+      <div class="st-lbl">Total Request</div>
+      <div class="st-sub">Semua endpoint</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-val green loading" id="vToday">--</div>
-      <div class="stat-label">Hari Ini</div>
-      <div class="stat-sub" id="vTodaySub">-- pengunjung</div>
+    <div class="st">
+      <div class="st-num c3 ld" id="vDay">--</div>
+      <div class="st-lbl">Hari Ini</div>
+      <div class="st-sub" id="vDaySub">-- pengunjung</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-val purple loading" id="vWeek">--</div>
-      <div class="stat-label">7 Hari Terakhir</div>
-      <div class="stat-sub" id="vWeekSub">-- pengunjung</div>
+    <div class="st">
+      <div class="st-num c4 ld" id="vWk">--</div>
+      <div class="st-lbl">7 Hari Terakhir</div>
+      <div class="st-sub" id="vWkSub">-- pengunjung</div>
     </div>
   </div>
 
   <!-- Provider Status -->
-  <div class="section">
-    <div class="sec-head">
-      <span class="sec-title">&#9889; Status Provider</span>
-      <span class="sec-badge">Live</span>
-    </div>
+  <div class="sec">
+    <span class="sec-t">Status Provider</span>
+    <span class="badge">LIVE</span>
   </div>
-  <div class="prov-grid">
-    <div class="prov-card shinigami">
-      <div class="prov-top">
-        <span class="prov-name">&#9889; Shinigami</span>
-        <span class="prov-badge checking" id="pShin">Checking...</span>
+  <div class="provs">
+    <div class="pv s1">
+      <div class="pv-top">
+        <span class="pv-name">Shinigami</span>
+        <span class="pv-st chk" id="pS">Checking...</span>
       </div>
-      <div class="prov-info"><b>Method:</b> REST API &middot; <b>Source:</b> api.shngm.io<br><span id="pShinMs"></span></div>
+      <div class="pv-info"><b>Method:</b> REST API<br><b>Source:</b> api.shngm.io<br><span id="pSms"></span></div>
     </div>
-    <div class="prov-card komiku">
-      <div class="prov-top">
-        <span class="prov-name">&#128214; Komiku</span>
-        <span class="prov-badge checking" id="pKom">Checking...</span>
+    <div class="pv s2">
+      <div class="pv-top">
+        <span class="pv-name">Komiku</span>
+        <span class="pv-st chk" id="pK">Checking...</span>
       </div>
-      <div class="prov-info"><b>Method:</b> HTML Scraping &middot; <b>Parser:</b> Cheerio<br><span id="pKomMs"></span></div>
+      <div class="pv-info"><b>Method:</b> HTML Scraping<br><b>Parser:</b> Cheerio<br><span id="pKms"></span></div>
     </div>
-    <div class="prov-card kiryuu">
-      <div class="prov-top">
-        <span class="prov-name">&#128640; Kiryuu</span>
-        <span class="prov-badge checking" id="pKir">Checking...</span>
+    <div class="pv s3">
+      <div class="pv-top">
+        <span class="pv-name">Kiryuu</span>
+        <span class="pv-st chk" id="pR">Checking...</span>
       </div>
-      <div class="prov-info"><b>Method:</b> Hybrid WP REST + Scraping<br><span id="pKirMs"></span></div>
+      <div class="pv-info"><b>Method:</b> WP REST + Scraping<br><span id="pRms"></span></div>
     </div>
   </div>
 
   <!-- Traffic Chart -->
-  <div class="chart-card">
-    <div class="chart-title">&#128200; Traffic 30 Hari Terakhir</div>
-    <div class="chart-sub">Request harian &middot; Pengunjung unik per hari</div>
-    <div class="chart-area"><canvas id="chartTraffic"></canvas></div>
+  <div class="chart-box">
+    <div class="chart-t">Traffic 30 Hari Terakhir</div>
+    <div class="chart-s">Request harian - Pengunjung unik per hari</div>
+    <div class="chart-area"><canvas id="cTraffic"></canvas></div>
   </div>
 
   <!-- Daftar Pengunjung -->
-  <div class="section">
-    <div class="sec-head">
-      <span class="sec-title">&#128101; Daftar Pengunjung</span>
-      <span class="sec-badge" id="visitorCount">--</span>
-    </div>
+  <div class="sec">
+    <span class="sec-t">Daftar Pengunjung</span>
+    <span class="badge" id="vCnt">--</span>
   </div>
   <div class="card">
-    <div class="card-body">
-      <table class="data-table">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Pengunjung</th>
+          <th>Negara</th>
+          <th>Halaman</th>
+          <th>Klik Komik</th>
+          <th>Terakhir Aktif</th>
+          <th class="hide-m">Device</th>
+        </tr>
+      </thead>
+      <tbody id="tVisit">
+        <tr><td colspan="7" class="empty">Memuat data...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Komik + Klik Terbaru -->
+  <div class="row2">
+    <div class="card">
+      <div class="card-hdr">
+        <span class="sec-t">Komik Populer</span>
+      </div>
+      <div id="cComic" style="padding:6px 0">
+        <div class="empty">Memuat...</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">
+        <span class="sec-t">Klik Komik Terbaru</span>
+        <span class="badge">LIVE</span>
+      </div>
+      <table class="tbl">
         <thead>
           <tr>
-            <th>#</th>
             <th>Pengunjung</th>
-            <th>Negara</th>
-            <th>Halaman</th>
-            <th>Klik Komik</th>
-            <th>Terakhir Aktif</th>
-            <th class="visitor-device">Device</th>
+            <th>Komik</th>
+            <th>Provider</th>
+            <th>Waktu</th>
           </tr>
         </thead>
-        <tbody id="visitorBody">
-          <tr><td colspan="7" class="empty">Memuat data...</td></tr>
+        <tbody id="tClick">
+          <tr><td colspan="4" class="empty">Memuat...</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- Komik yang Dilihat + Klik Komik Terbaru -->
-  <div class="split">
+  <!-- Provider Req + Countries -->
+  <div class="row2">
     <div class="card">
-      <div style="padding:.75rem .9rem;border-bottom:1px solid var(--border)">
-        <div class="sec-head">
-          <span class="sec-title" style="font-size:.85rem">&#128214; Komik yang Dilihat</span>
-        </div>
-      </div>
-      <div class="card-body" id="comicList" style="padding:.4rem 0">
-        <div class="empty">Memuat...</div>
-      </div>
+      <div class="card-hdr"><span class="sec-t">Request per Provider</span></div>
+      <div id="cProv" style="padding:6px 0"><div class="empty">Memuat...</div></div>
     </div>
     <div class="card">
-      <div style="padding:.75rem .9rem;border-bottom:1px solid var(--border)">
-        <div class="sec-head">
-          <span class="sec-title" style="font-size:.85rem">&#9889; Klik Komik Terbaru</span>
-          <span class="sec-badge">Live</span>
-        </div>
-      </div>
-      <div class="card-body">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Pengunjung</th>
-              <th>Komik</th>
-              <th>Provider</th>
-              <th>Waktu</th>
-            </tr>
-          </thead>
-          <tbody id="clickBody">
-            <tr><td colspan="4" class="empty">Memuat...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- Request per Provider + Top Negara -->
-  <div class="split">
-    <div class="card">
-      <div style="padding:.75rem .9rem;border-bottom:1px solid var(--border)">
-        <div class="sec-head">
-          <span class="sec-title" style="font-size:.85rem">&#128268; Request per Provider</span>
-        </div>
-      </div>
-      <div class="card-body" id="providerList" style="padding:.4rem 0">
-        <div class="empty">Memuat...</div>
-      </div>
-    </div>
-    <div class="card">
-      <div style="padding:.75rem .9rem;border-bottom:1px solid var(--border)">
-        <div class="sec-head">
-          <span class="sec-title" style="font-size:.85rem">&#127758; Top Negara</span>
-        </div>
-      </div>
-      <div class="card-body" id="countryList" style="padding:.4rem 0">
-        <div class="empty">Memuat...</div>
-      </div>
+      <div class="card-hdr"><span class="sec-t">Top Negara</span></div>
+      <div id="cCountry" style="padding:6px 0"><div class="empty">Memuat...</div></div>
     </div>
   </div>
 
   <!-- Footer -->
-  <div class="footer">
-    Built with &#9829; by <span>KomikVerse</span> &middot; Express 5 + TypeScript + Neon Postgres &middot; v2.2.0
-  </div>
+  <div class="ftr">Built with &#9829; by <b>KomikVerse</b> - Express 5 + TypeScript + Neon Postgres - v2.2.0</div>
 </div>
 
 <script>
-var API='/api';
-function $(id){return document.getElementById(id)}
-function setVal(id,v){var el=$(id);if(el){el.textContent=v;el.classList.remove('loading')}}
-function fmtNum(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return String(n)}
-function timeAgo(d){var s=Math.floor((Date.now()-new Date(d).getTime())/1e3);if(s<60)return s+'d lalu';if(s<3600)return Math.floor(s/60)+'m lalu';if(s<86400)return Math.floor(s/3600)+'j lalu';return Math.floor(s/86400)+'h lalu'}
+var API = '/api';
 
-var FLAGS={'ID':'\u{1F1EE}\u{1F1E9}','US':'\u{1F1FA}\u{1F1F8}','SG':'\u{1F1F8}\u{1F1EC}','JP':'\u{1F1EF}\u{1F1F5}','MY':'\u{1F1F2}\u{1F1FE}','GB':'\u{1F1EC}\u{1F1E7}','AU':'\u{1F1E6}\u{1F1FA}','IN':'\u{1F1EE}\u{1F1F3}','KR':'\u{1F1F0}\u{1F1F7}','DE':'\u{1F1E9}\u{1F1EA}','FR':'\u{1F1EB}\u{1F1F7}','NL':'\u{1F1F3}\u{1F1F1}','CA':'\u{1F1E8}\u{1F1E6}','BR':'\u{1F1E7}\u{1F1F7}','TH':'\u{1F1F9}\u{1F1ED}','PH':'\u{1F1F5}\u{1F1ED}','VN':'\u{1F1FB}\u{1F1F3}','TW':'\u{1F1F9}\u{1F1FC}','HK':'\u{1F1ED}\u{1F1F0}'};
-function flag(c){return c&&FLAGS[c]?FLAGS[c]+' '+c:'\u{1F310} '+(c||'?')}
-
-function parseDevice(ua){
-  if(!ua)return'-';
-  if(/Mobile|Android/i.test(ua))return'Mobile';
-  if(/Tablet|iPad/i.test(ua))return'Tablet';
-  if(/bot|crawl|spider|curl|wget|python|go-http/i.test(ua))return'Bot';
-  return'Desktop';
+function $(id) { return document.getElementById(id); }
+function sv(id, v) { var e = $(id); if (e) { e.textContent = v; e.classList.remove('ld'); } }
+function fn(n) { if (n >= 1e6) return (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n/1e3).toFixed(1) + 'K'; return String(n); }
+function ta(d) {
+  var s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+  if (s < 60) return s + ' detik lalu';
+  if (s < 3600) return Math.floor(s/60) + ' menit lalu';
+  if (s < 86400) return Math.floor(s/3600) + ' jam lalu';
+  return Math.floor(s/86400) + ' hari lalu';
 }
 
-function extractSlug(ep){
-  var m=ep.match(/\/detail\/(.+)/);
-  if(!m)return ep;
-  return decodeURIComponent(m[1]).replace(/-/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase()});
+var CF = {
+  'ID': 'ID', 'US': 'US', 'SG': 'SG', 'JP': 'JP', 'MY': 'MY',
+  'GB': 'GB', 'AU': 'AU', 'IN': 'IN', 'KR': 'KR', 'DE': 'DE',
+  'FR': 'FR', 'NL': 'NL', 'CA': 'CA', 'BR': 'BR', 'TH': 'TH',
+  'PH': 'PH', 'VN': 'VN', 'TW': 'TW', 'HK': 'HK'
+};
+function cf(c) { return c || '??'; }
+
+function pd(ua) {
+  if (!ua) return '-';
+  if (/Mobile|Android/i.test(ua)) return 'Mobile';
+  if (/Tablet|iPad/i.test(ua)) return 'Tablet';
+  if (/bot|crawl|spider|curl|wget|python|go-http/i.test(ua)) return 'Bot';
+  return 'Desktop';
 }
 
-// === Health Check ===
-(function(){
-  var t0=Date.now();
-  fetch(API+'/health').then(function(r){return r.json()}).then(function(){
-    var ms=Date.now()-t0;
-    $('sDot').classList.add('online');
-    $('sText').textContent='Online';
-    $('sLatency').style.display='';
-    $('sLatency').textContent=ms+'ms';
-  }).catch(function(){
-    $('sDot').classList.add('offline');
-    $('sText').textContent='Offline';
+function es(ep) {
+  var m = ep.match(/\/detail\/(.+)/);
+  if (!m) return ep;
+  return decodeURIComponent(m[1]).replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+}
+
+/* Health Check */
+(function() {
+  var t0 = Date.now();
+  fetch(API + '/health').then(function(r) { return r.json(); }).then(function() {
+    var ms = Date.now() - t0;
+    $('sDot').classList.add('on');
+    $('sText').textContent = 'Online';
+    $('sMs').style.display = '';
+    $('sMs').textContent = ms + 'ms';
+  }).catch(function() {
+    $('sDot').classList.add('off');
+    $('sText').textContent = 'Offline';
   });
 })();
 
-// === Provider Health ===
-[{key:'shinigami',badge:'pShin',ms:'pShinMs'},{key:'komiku',badge:'pKom',ms:'pKomMs'},{key:'kiryuu',badge:'pKir',ms:'pKirMs'}].forEach(function(p){
-  var t0=Date.now();
-  fetch(API+'/popular?provider='+p.key).then(function(r){
-    var ms=Date.now()-t0;
-    if(r.ok){
-      $(p.badge).textContent='Online';$(p.badge).className='prov-badge ok';
-      $(p.ms).innerHTML='<b>Latency:</b> '+ms+'ms';
-    }else{
-      $(p.badge).textContent='Error '+r.status;$(p.badge).className='prov-badge fail';
+/* Provider Health */
+var provs = [
+  { key: 'shinigami', b: 'pS', m: 'pSms' },
+  { key: 'komiku', b: 'pK', m: 'pKms' },
+  { key: 'kiryuu', b: 'pR', m: 'pRms' }
+];
+provs.forEach(function(p) {
+  var t0 = Date.now();
+  fetch(API + '/popular?provider=' + p.key).then(function(r) {
+    var ms = Date.now() - t0;
+    if (r.ok) {
+      $(p.b).textContent = 'Online';
+      $(p.b).className = 'pv-st ok';
+      $(p.m).innerHTML = '<b>Latency:</b> ' + ms + 'ms';
+    } else {
+      $(p.b).textContent = 'Error ' + r.status;
+      $(p.b).className = 'pv-st err';
     }
-  }).catch(function(){
-    $(p.badge).textContent='Offline';$(p.badge).className='prov-badge fail';
+  }).catch(function() {
+    $(p.b).textContent = 'Offline';
+    $(p.b).className = 'pv-st err';
   });
 });
 
-// === Analytics Data ===
-fetch(API+'/admin/analytics').then(function(r){return r.json()}).then(function(d){
-  // Stat cards
-  setVal('vVisitors',fmtNum(d.unique_visitors||0));
-  setVal('vRequests',fmtNum(d.total_requests||0));
-  setVal('vToday',fmtNum(d.today_requests||0));
-  setVal('vWeek',fmtNum(d.week_requests||0));
-  $('vTodaySub').textContent=fmtNum(d.today_visitors||0)+' pengunjung';
-  $('vWeekSub').textContent=fmtNum(d.week_visitors||0)+' pengunjung';
+/* Analytics */
+fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(function(d) {
+  sv('vVisit', fn(d.unique_visitors || 0));
+  sv('vReq', fn(d.total_requests || 0));
+  sv('vDay', fn(d.today_requests || 0));
+  sv('vWk', fn(d.week_requests || 0));
+  $('vDaySub').textContent = fn(d.today_visitors || 0) + ' pengunjung';
+  $('vWkSub').textContent = fn(d.week_visitors || 0) + ' pengunjung';
 
-  // Visitor list
-  renderVisitors(d.recent_visitors||[]);
-
-  // Top comics
-  renderTopComics(d.top_comics||[]);
-
-  // Recent comic clicks
-  renderComicClicks(d.recent_comic_clicks||[]);
-
-  // Provider requests
-  renderRanks('providerList',d.top_providers||[],'provider','count');
-
-  // Top countries
-  renderRanks('countryList',d.top_countries||[],'country','count',true);
-
-  // Traffic chart
-  drawTrafficChart(d.daily_30d||[]);
-}).catch(function(){
-  ['vVisitors','vRequests','vToday','vWeek'].forEach(function(id){setVal(id,'0')});
-  $('visitorBody').innerHTML='<tr><td colspan="7" class="empty">Gagal memuat data</td></tr>';
+  rvs(d.recent_visitors || []);
+  rtc(d.top_comics || []);
+  rcc(d.recent_comic_clicks || []);
+  rrk('cProv', d.top_providers || [], 'provider', 'count', false);
+  rrk('cCountry', d.top_countries || [], 'country', 'count', true);
+  dtc(d.daily_30d || []);
+}).catch(function() {
+  ['vVisit','vReq','vDay','vWk'].forEach(function(id) { sv(id, '0'); });
+  $('tVisit').innerHTML = '<tr><td colspan="7" class="empty">Gagal memuat data</td></tr>';
 });
 
-function renderVisitors(items){
-  $('visitorCount').textContent=items.length+' terbaru';
-  if(!items.length){$('visitorBody').innerHTML='<tr><td colspan="7" class="empty">Belum ada pengunjung</td></tr>';return}
-  var html='';
-  items.forEach(function(v,i){
-    var shortHash=v.ip_hash?v.ip_hash.substring(0,8):'?';
-    var device=parseDevice(v.user_agent);
-    html+='<tr>'
-      +'<td>'+(i+1)+'</td>'
-      +'<td><span class="hash">'+shortHash+'</span></td>'
-      +'<td>'+flag(v.country)+'</td>'
-      +'<td><span class="badge-sm views">'+v.pages_viewed+' hal</span></td>'
-      +'<td><span class="badge-sm clicks">'+v.comic_clicks+' klik</span></td>'
-      +'<td class="time-ago">'+timeAgo(v.last_seen)+'</td>'
-      +'<td class="visitor-device">'+device+'</td>'
-      +'</tr>';
+function rvs(items) {
+  $('vCnt').textContent = items.length + ' terbaru';
+  if (!items.length) { $('tVisit').innerHTML = '<tr><td colspan="7" class="empty">Belum ada pengunjung</td></tr>'; return; }
+  var h = '';
+  items.forEach(function(v, i) {
+    var sh = v.ip_hash ? v.ip_hash.substring(0, 8) : '?';
+    h += '<tr>'
+      + '<td>' + (i+1) + '</td>'
+      + '<td><span class="hash">' + sh + '</span></td>'
+      + '<td>' + cf(v.country) + '</td>'
+      + '<td><span class="tag v">' + v.pages_viewed + ' hal</span></td>'
+      + '<td><span class="tag k">' + v.comic_clicks + ' klik</span></td>'
+      + '<td class="tm">' + ta(v.last_seen) + '</td>'
+      + '<td class="hide-m">' + pd(v.user_agent) + '</td>'
+      + '</tr>';
   });
-  $('visitorBody').innerHTML=html;
+  $('tVisit').innerHTML = h;
 }
 
-function renderTopComics(items){
-  if(!items.length){$('comicList').innerHTML='<div class="empty">Belum ada data</div>';return}
-  var html='';
-  items.forEach(function(c,i){
-    var name=extractSlug(c.endpoint);
-    html+='<div class="rank-item">'
-      +'<span class="rank-pos">#'+(i+1)+'</span>'
-      +'<span class="rank-name comic-name">'+name+'</span>'
-      +'<span class="rank-count" title="'+c.count+' views, '+c.unique_viewers+' unique">'+fmtNum(parseInt(c.count))+' <span style="font-size:.55rem;color:var(--text-dim)">views</span></span>'
-      +'</div>';
+function rtc(items) {
+  if (!items.length) { $('cComic').innerHTML = '<div class="empty">Belum ada data</div>'; return; }
+  var h = '';
+  items.forEach(function(c, i) {
+    var name = es(c.endpoint);
+    h += '<div class="rk">'
+      + '<span class="rk-n">#' + (i+1) + '</span>'
+      + '<span class="rk-t comic-n">' + name + '</span>'
+      + '<span class="rk-c">' + fn(parseInt(c.count)) + ' <span style="font-size:12px;color:var(--text-dim)">views</span></span>'
+      + '</div>';
   });
-  $('comicList').innerHTML=html;
+  $('cComic').innerHTML = h;
 }
 
-function renderComicClicks(items){
-  if(!items.length){$('clickBody').innerHTML='<tr><td colspan="4" class="empty">Belum ada klik</td></tr>';return}
-  var html='';
-  items.forEach(function(c){
-    var name=extractSlug(c.endpoint);
-    var shortHash=c.ip_hash?c.ip_hash.substring(0,6):'?';
-    html+='<tr>'
-      +'<td><span class="hash">'+shortHash+'</span> '+flag(c.country)+'</td>'
-      +'<td class="comic-name" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</td>'
-      +'<td>'+(c.provider||'-')+'</td>'
-      +'<td class="time-ago">'+timeAgo(c.created_at)+'</td>'
-      +'</tr>';
+function rcc(items) {
+  if (!items.length) { $('tClick').innerHTML = '<tr><td colspan="4" class="empty">Belum ada klik</td></tr>'; return; }
+  var h = '';
+  items.forEach(function(c) {
+    var name = es(c.endpoint);
+    var sh = c.ip_hash ? c.ip_hash.substring(0, 6) : '?';
+    h += '<tr>'
+      + '<td><span class="hash">' + sh + '</span> ' + cf(c.country) + '</td>'
+      + '<td class="comic-n" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + '</td>'
+      + '<td>' + (c.provider || '-') + '</td>'
+      + '<td class="tm">' + ta(c.created_at) + '</td>'
+      + '</tr>';
   });
-  $('clickBody').innerHTML=html;
+  $('tClick').innerHTML = h;
 }
 
-function renderRanks(containerId,items,nameKey,countKey,isCountry){
-  var el=$(containerId);
-  if(!items.length){el.innerHTML='<div class="empty">Belum ada data</div>';return}
-  var html='';
-  items.forEach(function(item,i){
-    var name=isCountry?flag(item[nameKey]):item[nameKey]||'-';
-    html+='<div class="rank-item">'
-      +'<span class="rank-pos">#'+(i+1)+'</span>'
-      +'<span class="rank-name"'+(isCountry?' style="font-family:var(--sans)"':'')+'>'+(isCountry?name:name)+'</span>'
-      +'<span class="rank-count">'+fmtNum(parseInt(item[countKey])||0)+'</span>'
-      +'</div>';
+function rrk(id, items, nk, ck, isc) {
+  var el = $(id);
+  if (!items.length) { el.innerHTML = '<div class="empty">Belum ada data</div>'; return; }
+  var h = '';
+  items.forEach(function(item, i) {
+    var name = isc ? cf(item[nk]) : (item[nk] || '-');
+    h += '<div class="rk">'
+      + '<span class="rk-n">#' + (i+1) + '</span>'
+      + '<span class="rk-t">' + name + '</span>'
+      + '<span class="rk-c">' + fn(parseInt(item[ck]) || 0) + '</span>'
+      + '</div>';
   });
-  el.innerHTML=html;
+  el.innerHTML = h;
 }
 
-function drawTrafficChart(data){
-  var canvas=$('chartTraffic');
-  if(!canvas||!data.length)return;
-  var ctx=canvas.getContext('2d');
-  var dpr=window.devicePixelRatio||1;
-  var rect=canvas.parentElement.getBoundingClientRect();
-  canvas.width=rect.width*dpr;
-  canvas.height=rect.height*dpr;
-  ctx.scale(dpr,dpr);
-  var W=rect.width,H=rect.height;
+function dtc(data) {
+  var canvas = $('cTraffic');
+  if (!canvas || !data.length) return;
+  var ctx = canvas.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+  var rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  var W = rect.width, H = rect.height;
+  var pad = { t: 24, b: 38, l: 44, r: 16 };
+  var cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
+  var maxR = Math.max.apply(null, data.map(function(d) { return parseInt(d.count) || 0; })) || 1;
+  var maxV = Math.max.apply(null, data.map(function(d) { return parseInt(d.visitors) || 0; })) || 1;
+  var maxA = Math.max(maxR, maxV);
 
-  var pad={t:20,b:35,l:40,r:15};
-  var cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
-  var maxReq=Math.max.apply(null,data.map(function(d){return parseInt(d.count)||0}))||1;
-  var maxVis=Math.max.apply(null,data.map(function(d){return parseInt(d.visitors)||0}))||1;
-  var maxVal=Math.max(maxReq,maxVis);
-
-  ctx.clearRect(0,0,W,H);
+  ctx.clearRect(0, 0, W, H);
 
   // Grid
-  for(var i=0;i<=4;i++){
-    var y=pad.t+cH*(1-i/4);
-    ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
-    ctx.fillStyle='rgba(255,255,255,.2)';ctx.font='9px JetBrains Mono';ctx.textAlign='right';
-    ctx.fillText(Math.round(maxVal*i/4),pad.l-6,y+3);
+  for (var i = 0; i <= 4; i++) {
+    var y = pad.t + cH * (1 - i / 4);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxA * i / 4), pad.l - 8, y + 4);
   }
 
-  var step=cW/(data.length-1||1);
+  var step = cW / (data.length - 1 || 1);
 
-  // Area fill
-  ctx.beginPath();ctx.moveTo(pad.l,pad.t+cH);
-  data.forEach(function(d,idx){ctx.lineTo(pad.l+idx*step,pad.t+cH-(parseInt(d.count)/maxVal)*cH)});
-  ctx.lineTo(pad.l+(data.length-1)*step,pad.t+cH);ctx.closePath();
-  var grad=ctx.createLinearGradient(0,pad.t,0,pad.t+cH);
-  grad.addColorStop(0,'rgba(52,211,153,.18)');grad.addColorStop(1,'rgba(52,211,153,.01)');
-  ctx.fillStyle=grad;ctx.fill();
+  // Area
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t + cH);
+  data.forEach(function(d, idx) { ctx.lineTo(pad.l + idx * step, pad.t + cH - (parseInt(d.count) / maxA) * cH); });
+  ctx.lineTo(pad.l + (data.length - 1) * step, pad.t + cH);
+  ctx.closePath();
+  var g = ctx.createLinearGradient(0, pad.t, 0, pad.t + cH);
+  g.addColorStop(0, 'rgba(52,211,153,0.2)');
+  g.addColorStop(1, 'rgba(52,211,153,0.01)');
+  ctx.fillStyle = g;
+  ctx.fill();
 
   // Request line
-  ctx.beginPath();ctx.strokeStyle='#34d399';ctx.lineWidth=2;ctx.lineJoin='round';
-  data.forEach(function(d,idx){var x=pad.l+idx*step,y=pad.t+cH-(parseInt(d.count)/maxVal)*cH;idx===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});
+  ctx.beginPath(); ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  data.forEach(function(d, idx) {
+    var x = pad.l + idx * step, y2 = pad.t + cH - (parseInt(d.count) / maxA) * cH;
+    idx === 0 ? ctx.moveTo(x, y2) : ctx.lineTo(x, y2);
+  });
   ctx.stroke();
 
   // Visitor line (dashed)
-  ctx.beginPath();ctx.strokeStyle='#60a5fa';ctx.lineWidth=2;ctx.setLineDash([4,3]);
-  data.forEach(function(d,idx){var x=pad.l+idx*step,y=pad.t+cH-(parseInt(d.visitors||0)/maxVal)*cH;idx===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});
-  ctx.stroke();ctx.setLineDash([]);
+  ctx.beginPath(); ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+  data.forEach(function(d, idx) {
+    var x = pad.l + idx * step, y2 = pad.t + cH - (parseInt(d.visitors || 0) / maxA) * cH;
+    idx === 0 ? ctx.moveTo(x, y2) : ctx.lineTo(x, y2);
+  });
+  ctx.stroke(); ctx.setLineDash([]);
 
   // Dots
-  data.forEach(function(d,idx){
-    var x=pad.l+idx*step,y=pad.t+cH-(parseInt(d.count)/maxVal)*cH;
-    ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fillStyle='#34d399';ctx.fill();
+  data.forEach(function(d, idx) {
+    var x = pad.l + idx * step, y2 = pad.t + cH - (parseInt(d.count) / maxA) * cH;
+    ctx.beginPath(); ctx.arc(x, y2, 3, 0, Math.PI * 2); ctx.fillStyle = '#34d399'; ctx.fill();
   });
 
   // X labels
-  var labelStep=Math.max(1,Math.floor(data.length/6));
-  ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='9px Inter';ctx.textAlign='center';
-  data.forEach(function(d,idx){
-    if(idx%labelStep===0||idx===data.length-1){
-      var dt=new Date(d.date);
-      ctx.fillText(dt.getDate()+'/'+(dt.getMonth()+1),pad.l+idx*step,H-8);
+  var ls = Math.max(1, Math.floor(data.length / 6));
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '11px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  data.forEach(function(d, idx) {
+    if (idx % ls === 0 || idx === data.length - 1) {
+      var dt = new Date(d.date);
+      ctx.fillText(dt.getDate() + '/' + (dt.getMonth() + 1), pad.l + idx * step, H - 10);
     }
   });
 
   // Legend
-  ctx.fillStyle='#34d399';ctx.beginPath();ctx.arc(W-170,14,4,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='rgba(255,255,255,.5)';ctx.font='10px Inter';ctx.textAlign='left';ctx.fillText('Requests',W-162,17);
-  ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.arc(W-90,14,4,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='rgba(255,255,255,.5)';ctx.fillText('Visitors',W-82,17);
+  ctx.fillStyle = '#34d399';
+  ctx.beginPath(); ctx.arc(W - 180, 16, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '12px Inter, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Requests', W - 170, 20);
+  ctx.fillStyle = '#60a5fa';
+  ctx.beginPath(); ctx.arc(W - 95, 16, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillText('Visitors', W - 85, 20);
 }
 
 // Resize
-var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){
-  fetch(API+'/admin/analytics').then(function(r){return r.json()}).then(function(d){drawTrafficChart(d.daily_30d||[])});
-},300)});
+var _rt;
+window.addEventListener('resize', function() {
+  clearTimeout(_rt);
+  _rt = setTimeout(function() {
+    fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(function(d) { dtc(d.daily_30d || []); });
+  }, 300);
+});
 </script>
 </body>
 </html>

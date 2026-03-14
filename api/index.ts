@@ -156,6 +156,17 @@ async function getGenreList() {
 function getTypeFromCountry(c: string) {
   return c === "KR" ? "Manhwa" : c === "CN" ? "Manhua" : "Manga";
 }
+
+function resolveComicType(m: any): string {
+  // country_id is the most reliable source for type
+  if (m.country_id === "KR") return "Manhwa";
+  if (m.country_id === "CN") return "Manhua";
+  if (m.country_id === "JP") return "Manga";
+  // Fallback to Format taxonomy, then country lookup
+  const formatName = m.taxonomy?.Format?.[0]?.name;
+  if (formatName && /^(Manhwa|Manhua|Manga)$/i.test(formatName)) return formatName;
+  return m.country_id ? getTypeFromCountry(m.country_id) : "Manga";
+}
 function getStatusText(s: number) {
   return s === 1 ? "Ongoing" : s === 2 ? "Completed" : s === 3 ? "Hiatus" : "Unknown";
 }
@@ -205,7 +216,7 @@ function transformComic(m: any) {
     thumbnail: m.cover_image_url,
     image: m.cover_image_url,
     href: `/manga/${m.manga_id}`,
-    type: m.taxonomy?.Format?.[0]?.name || getTypeFromCountry(m.country_id),
+    type: resolveComicType(m),
     chapter: m.latest_chapter_number ? `Chapter ${m.latest_chapter_number}` : undefined,
     rating: m.user_rate || undefined,
     description: m.description,
@@ -222,7 +233,7 @@ function transformComicDetail(m: any) {
     thumbnail: m.cover_image_url,
     image: m.cover_image_url,
     description: m.description,
-    type: m.taxonomy?.Format?.[0]?.name || getTypeFromCountry(m.country_id),
+    type: resolveComicType(m),
     status: getStatusText(m.status),
     author: m.taxonomy?.Author?.map((a: { name: string }) => a.name).join(", "),
     artist: m.taxonomy?.Artist?.map((a: { name: string }) => a.name).join(", "),
@@ -892,17 +903,8 @@ async function mergeChaptersFromOtherProviders(
   // Tag primary chapters with their provider
   primaryChapters.forEach(ch => { if (!ch.provider) ch.provider = currentProvider; });
 
-  // Check if chapters are incomplete: lowest number > 1
   const numbers = primaryChapters.map(c => c.number).filter((n: number) => typeof n === "number" && !isNaN(n));
   if (numbers.length === 0) return primaryChapters;
-  const minChapter = Math.min(...numbers);
-  const maxChapter = Math.max(...numbers);
-  // Only trigger fallback if missing significant early chapters (min > 3)
-  if (minChapter <= 3) return primaryChapters;
-
-  // Also check for gaps: if total chapters is much less than expected range
-  const expectedCount = maxChapter - minChapter + 1;
-  const hasGaps = numbers.length < expectedCount * 0.7;
 
   // Build list of titles to try: primary title + alternative titles
   const titlesToTry = [comicTitle];
@@ -915,7 +917,8 @@ async function mergeChaptersFromOtherProviders(
     }
   }
 
-  const otherProviders = ["komiku", "kiryuu", "shinigami"].filter(p => p !== currentProvider);
+  // Always try to merge from other providers to get the most complete chapter list
+  const otherProviders = ["shinigami", "komiku", "kiryuu"].filter(p => p !== currentProvider);
   const existingNumbers = new Set(numbers);
 
   for (const fallbackProvider of otherProviders) {
@@ -936,29 +939,42 @@ async function mergeChaptersFromOtherProviders(
 
       if (fallbackChapters.length === 0) continue;
 
-      // Merge: add chapters from fallback that don't exist in primary
-      let merged = false;
-      for (const fch of fallbackChapters) {
-        if (typeof fch.number === "number" && !isNaN(fch.number) && !existingNumbers.has(fch.number)) {
-          primaryChapters.push(fch);
-          existingNumbers.add(fch.number);
-          merged = true;
+      // If fallback provider has WAY more chapters, use it as the base
+      // e.g., primary has 4 chapters, fallback has 200 → swap base
+      if (fallbackChapters.length > primaryChapters.length * 3 && fallbackChapters.length > 20) {
+        // Fallback has significantly more chapters — use it as base
+        const fallbackNumbers = new Set(
+          fallbackChapters.map(c => c.number).filter((n: number) => typeof n === "number" && !isNaN(n))
+        );
+        // Add primary chapters that fallback doesn't have
+        for (const pch of primaryChapters) {
+          if (typeof pch.number === "number" && !isNaN(pch.number) && !fallbackNumbers.has(pch.number)) {
+            fallbackChapters.push(pch);
+            fallbackNumbers.add(pch.number);
+          }
         }
-      }
-
-      if (merged) {
-        // Re-sort desc by chapter number
-        primaryChapters.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
-        // If we filled the gap sufficiently, stop trying other providers
-        const newNumbers = primaryChapters.map(c => c.number).filter((n: number) => typeof n === "number" && !isNaN(n));
-        const newMin = newNumbers.length ? Math.min(...newNumbers) : minChapter;
-        if (newMin <= 3) break;
+        primaryChapters = fallbackChapters;
+        // Update existing numbers set
+        existingNumbers.clear();
+        for (const ch of primaryChapters) {
+          if (typeof ch.number === "number" && !isNaN(ch.number)) existingNumbers.add(ch.number);
+        }
+      } else {
+        // Normal merge: add chapters from fallback that don't exist in primary
+        for (const fch of fallbackChapters) {
+          if (typeof fch.number === "number" && !isNaN(fch.number) && !existingNumbers.has(fch.number)) {
+            primaryChapters.push(fch);
+            existingNumbers.add(fch.number);
+          }
+        }
       }
     } catch {
       continue;
     }
   }
 
+  // Re-sort desc by chapter number
+  primaryChapters.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
   return primaryChapters;
 }
 
