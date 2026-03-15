@@ -27,6 +27,12 @@ async function loadAll() {
     try {
       await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
       await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
+      // Ensure new ad slots exist
+      await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
+        ('popup-global', 'Popup/Interstitial (Seluruh Halaman)', 'global', false),
+        ('native-home', 'Native Banner Homepage', 'home', false),
+        ('native-detail', 'Native Banner Detail Page', 'detail', false)
+        ON CONFLICT (slot_name) DO NOTHING`);
     } catch { /* ignore if already exists or table missing */ }
     _seedColsMigrated = true;
   }

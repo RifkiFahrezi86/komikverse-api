@@ -60,7 +60,10 @@ INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
   ('detail-before-chapters', 'Sebelum Daftar Chapter', 'detail', false),
   ('reader-top', 'Atas Reader Page', 'reader', false),
   ('reader-bottom', 'Bawah Reader Page', 'reader', false),
-  ('reader-between', 'Antara Panel Reader', 'reader', false)
+  ('reader-between', 'Antara Panel Reader', 'reader', false),
+  ('popup-global', 'Popup/Interstitial (Seluruh Halaman)', 'global', false),
+  ('native-home', 'Native Banner Homepage', 'home', false),
+  ('native-detail', 'Native Banner Detail Page', 'detail', false)
 ON CONFLICT (slot_name) DO NOTHING;
 
 -- Seed default site settings
