@@ -26,7 +26,11 @@ async function loadAll() {
   if (!_seedColsMigrated) {
     try {
       await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
-      await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free BOOLEAN DEFAULT true");
+      await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free BOOLEAN DEFAULT false");
+      // Fix: non-admin users should not be ad-free
+      await _query("UPDATE users SET ad_free = false WHERE role != 'admin' AND ad_free = true");
+      await _query("UPDATE users SET ad_free = true WHERE role = 'admin'");
+      await _query("ALTER TABLE users ALTER COLUMN ad_free SET DEFAULT false");
       await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
       // Ensure new ad slots exist
       await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
