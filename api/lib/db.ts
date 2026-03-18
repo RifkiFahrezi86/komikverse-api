@@ -1,4 +1,6 @@
-// Support semua nama variabel yang bisa dipakai Vercel/Neon integration
+// Shared Database Helper — used by all API route files
+// Uses neon() .query() pattern: sql.query(text, params)
+
 function getDatabaseUrl() {
   return (
     process.env.POSTGRES_URL ||
@@ -10,24 +12,20 @@ function getDatabaseUrl() {
   );
 }
 
-let _neon: any;
+let _sql: any;
 
-async function getNeon() {
-  if (!_neon) {
+async function getSql() {
+  if (!_sql) {
+    const url = getDatabaseUrl();
+    if (!url) throw new Error("Database not configured");
     const mod = await import("@neondatabase/serverless");
-    _neon = (mod as any).neon || (mod as any).default?.neon || mod;
+    const neon = (mod as any).neon || (mod as any).default?.neon;
+    _sql = neon(url);
   }
-  return _neon;
+  return _sql;
 }
 
-export async function getDb() {
-  const url = getDatabaseUrl();
-  if (!url) throw new Error("Database not configured");
-  const neon = await getNeon();
-  return neon(url);
-}
-
-export async function query(sql: string, params: unknown[] = []) {
-  const db = await getDb();
-  return db(sql, params);
+export async function query(text: string, params: unknown[] = []) {
+  const sql = await getSql();
+  return sql.query(text, params);
 }

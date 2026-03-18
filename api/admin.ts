@@ -1,18 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { query as dbQuery } from "./lib/db";
 
-let _query: any;
+let _query: typeof dbQuery;
 let _jwt: any;
 let _bcrypt: any;
 let _seedColsMigrated = false;
 
 async function loadAll() {
   if (!_query) {
-    const neonMod = await import("@neondatabase/serverless");
-    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
-    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
-    if (!url) throw new Error("Database not configured");
-    const sql = neon(url);
-    _query = (text: string, params: unknown[] = []) => sql.query(text, params);
+    _query = dbQuery;
   }
   if (!_jwt) {
     const j = await import("jsonwebtoken");
@@ -26,12 +22,15 @@ async function loadAll() {
   if (!_seedColsMigrated) {
     try {
       await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
+      await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free BOOLEAN DEFAULT true");
       await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
       // Ensure new ad slots exist
       await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
         ('popup-global', 'Popup/Interstitial (Seluruh Halaman)', 'global', false),
         ('native-home', 'Native Banner Homepage', 'home', false),
-        ('native-detail', 'Native Banner Detail Page', 'detail', false)
+        ('native-detail', 'Native Banner Detail Page', 'detail', false),
+        ('popunder-global', 'Popunder (Seluruh Halaman)', 'global', false),
+        ('socialbar-global', 'Social Bar (Seluruh Halaman)', 'global', false)
         ON CONFLICT (slot_name) DO NOTHING`);
     } catch { /* ignore if already exists or table missing */ }
     _seedColsMigrated = true;
@@ -211,10 +210,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
   await loadAll();
 
-  // Analytics endpoint — public (no auth required) for dashboard
+  // Analytics endpoint — admin auth required
   const earlyPath = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
   const earlyResource = earlyPath.split("/")[0] || "";
   if (earlyResource === "analytics" && req.method === "GET") {
+    const analyticsAdmin = getAdmin(req);
+    if (!analyticsAdmin) return res.status(403).json({ error: "Admin access required" });
     try {
       await _query(`
         CREATE TABLE IF NOT EXISTS api_analytics (
@@ -340,7 +341,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (resource === "users") {
       if (req.method === "GET") {
         const rows = await _query(
-          "SELECT id, username, email, role, avatar_url, is_seed, created_at FROM users ORDER BY created_at DESC"
+          "SELECT id, username, email, role, avatar_url, is_seed, ad_free, created_at FROM users ORDER BY created_at DESC"
         );
         return res.status(200).json({ users: rows });
       }
@@ -349,6 +350,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
         const id = parseInt(body.id);
         const username = body.username !== undefined ? String(body.username).trim().slice(0, 50) : null;
+        const adFree = body.ad_free !== undefined ? Boolean(body.ad_free) : null;
 
         if (!id) return res.status(400).json({ error: "User id required" });
 
@@ -358,6 +360,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const existing = await _query("SELECT id FROM users WHERE username = $1 AND id != $2", [username, id]);
           if (existing.length > 0) return res.status(400).json({ error: "Username sudah dipakai" });
           await _query("UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2", [username, id]);
+          return res.status(200).json({ success: true });
+        }
+
+        if (adFree !== null) {
+          await _query("UPDATE users SET ad_free = $1, updated_at = NOW() WHERE id = $2", [adFree, id]);
           return res.status(200).json({ success: true });
         }
 

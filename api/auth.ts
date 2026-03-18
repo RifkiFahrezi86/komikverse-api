@@ -1,24 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { query as dbQuery } from "./lib/db";
 
 // ALL imports are dynamic — zero static imports to avoid Vercel module crash
-let _query: any;
+let _query: typeof dbQuery;
 let _bcrypt: any;
 let _jwt: any;
 
 async function loadAll() {
   if (!_query) {
-    const neonMod = await import("@neondatabase/serverless");
-    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
-    const url =
-      process.env.POSTGRES_URL ||
-      process.env.DATABASE_URL ||
-      process.env.POSTGRES_URL_NON_POOLING ||
-      process.env.DATABASE_URL_UNPOOLED ||
-      process.env.POSTGRES_PRISMA_URL ||
-      "";
-    if (!url) throw new Error("Database not configured");
-    const sql = neon(url);
-    _query = (text: string, params: unknown[] = []) => sql.query(text, params);
+    _query = dbQuery;
   }
   if (!_bcrypt) {
     const b = await import("bcryptjs");
@@ -94,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { payload = _jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: "Invalid token" }); }
 
       const rows = await _query(
-        "SELECT id, username, email, role, avatar_url, created_at FROM users WHERE id = $1",
+        "SELECT id, username, email, role, avatar_url, ad_free, created_at FROM users WHERE id = $1",
         [payload.id]
       );
       if (rows.length === 0) return res.status(401).json({ error: "User not found" });
@@ -147,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const passwordHash = await _bcrypt.hash(password, 10);
       const result = await _query(
-        "INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, 'user') RETURNING id, username, email, role, created_at",
+        "INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, 'user') RETURNING id, username, email, role, ad_free, created_at",
         [username, email, passwordHash]
       );
 
@@ -165,7 +155,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!login || !password) return res.status(400).json({ error: "Username/email dan password diperlukan" });
 
       const rows = await _query(
-        "SELECT id, username, email, password_hash, role, avatar_url, created_at FROM users WHERE username = $1 OR email = $1",
+        "SELECT id, username, email, password_hash, role, avatar_url, ad_free, created_at FROM users WHERE username = $1 OR email = $1",
         [login.toLowerCase()]
       );
       if (rows.length === 0) return res.status(401).json({ error: "Username atau password salah" });
@@ -190,8 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error("Auth error:", error);
     return res.status(500).json({
-      error: "Internal server error",
-      message: error?.message || String(error)
+      error: "Internal server error"
     });
   }
 }

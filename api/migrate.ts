@@ -1,22 +1,18 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { query as dbQuery } from "./lib/db";
 
-let _query: any;
+let _query: typeof dbQuery;
 
 async function loadDb() {
   if (!_query) {
-    const neonMod = await import("@neondatabase/serverless");
-    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
-    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
-    if (!url) throw new Error("Database not configured");
-    const sql = neon(url);
-    _query = (text: string, params: unknown[] = []) => sql.query(text, params);
+    _query = dbQuery;
   }
 }
 
 // Pre-computed bcrypt hash of 'admin123' (cost 10) — no need to import bcryptjs
 const ADMIN_HASH = "$2b$10$VFfeR324ey/yLn/h/aK2EumR0wQJeDM6I96nclKRN2EgajssQf/DC";
 
-const MIGRATION_SECRET = process.env.MIGRATION_SECRET || process.env.JWT_SECRET || "";
+const MIGRATION_SECRET = process.env.MIGRATION_SECRET || "";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("X-Content-Type-Options", "nosniff");

@@ -201,11 +201,15 @@ async function fetchAniListStatus(title: string): Promise<string> {
   if (cached && Date.now() - cached.ts < ANILIST_CACHE_TTL) return cached.status;
   try {
     const query = `query ($search: String) { Media(search: $search, type: MANGA) { status } }`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const resp = await fetch("https://graphql.anilist.co", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ query, variables: { search: title } }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (!resp.ok) return "Unknown";
     const json = await resp.json() as { data?: { Media?: { status?: string } } };
     const raw = json.data?.Media?.status || "";
@@ -1122,21 +1126,13 @@ const providers: Record<string, Record<string, (query: any, slug?: string) => Pr
 };
 
 // ─── Analytics Tracking (fire-and-forget) ───
-let _analyticsQuery: any;
 let _analyticsMigrated = false;
 
 async function getAnalyticsDb() {
-  if (!_analyticsQuery) {
-    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
-    if (!url) return null;
-    const neonMod = await import("@neondatabase/serverless");
-    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
-    const sql = neon(url);
-    _analyticsQuery = (text: string, params: unknown[] = []) => sql.query(text, params);
-  }
+  const { query: analyticsQuery } = await import("./lib/db");
   if (!_analyticsMigrated) {
     try {
-      await _analyticsQuery(`
+      await analyticsQuery(`
         CREATE TABLE IF NOT EXISTS api_analytics (
           id SERIAL PRIMARY KEY,
           ip_hash VARCHAR(64) NOT NULL,
@@ -1148,12 +1144,12 @@ async function getAnalyticsDb() {
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
       `);
-      await _analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_created ON api_analytics(created_at DESC)");
-      await _analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_ip ON api_analytics(ip_hash)");
+      await analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_created ON api_analytics(created_at DESC)");
+      await analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_ip ON api_analytics(ip_hash)");
     } catch { /* ignore */ }
     _analyticsMigrated = true;
   }
-  return _analyticsQuery;
+  return analyticsQuery;
 }
 
 function hashIP(ip: string): string {
