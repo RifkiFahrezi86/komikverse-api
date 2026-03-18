@@ -28,9 +28,19 @@ async function loadAll() {
       await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
       await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free BOOLEAN DEFAULT false");
       // Fix: non-admin users should not be ad-free
-      await _query("UPDATE users SET ad_free = false WHERE role != 'admin' AND ad_free = true");
-      await _query("UPDATE users SET ad_free = true WHERE role = 'admin'");
+      await _query("UPDATE users SET ad_free = false WHERE role NOT IN ('admin', 'owner') AND ad_free = true");
+      await _query("UPDATE users SET ad_free = true WHERE role IN ('admin', 'owner')");
       await _query("ALTER TABLE users ALTER COLUMN ad_free SET DEFAULT false");
+      // Ensure role constraint includes 'owner'
+      try {
+        await _query("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check");
+        await _query("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin', 'owner'))");
+      } catch { /* constraint may already exist */ }
+      // Migrate first admin to owner (only if no owner exists yet)
+      const ownerCheck = await _query("SELECT id FROM users WHERE role = 'owner' LIMIT 1");
+      if (ownerCheck.length === 0) {
+        await _query("UPDATE users SET role = 'owner' WHERE id = (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1)");
+      }
       await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
       // Ensure new ad slots exist
       await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
@@ -77,7 +87,7 @@ function getAdmin(req: VercelRequest): any {
   if (!token) return null;
   try {
     const payload = _jwt.verify(token, JWT_SECRET) as any;
-    return payload.role === "admin" ? payload : null;
+    return (payload.role === "admin" || payload.role === "owner") ? payload : null;
   } catch { return null; }
 }
 
@@ -374,12 +384,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json({ success: true });
         }
 
+        // Promote/demote role (owner only)
+        const newRole = body.role !== undefined ? String(body.role) : null;
+        if (newRole !== null) {
+          if (!['user', 'admin'].includes(newRole)) return res.status(400).json({ error: "Role tidak valid" });
+          // Only owner can change roles
+          const caller = await _query("SELECT role FROM users WHERE id = $1", [admin.id]);
+          if (caller.length === 0 || caller[0].role !== 'owner') return res.status(403).json({ error: "Hanya owner yang dapat mengubah role" });
+          // Cannot change own role or another owner
+          const target = await _query("SELECT role FROM users WHERE id = $1", [id]);
+          if (target.length === 0) return res.status(404).json({ error: "User tidak ditemukan" });
+          if (target[0].role === 'owner') return res.status(400).json({ error: "Tidak dapat mengubah role owner" });
+          await _query("UPDATE users SET role = $1, ad_free = $2, updated_at = NOW() WHERE id = $3", [newRole, newRole === 'admin', id]);
+          return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ error: "Nothing to update" });
       }
       if (req.method === "DELETE") {
         const id = parseInt(String(req.query.id));
         if (!id) return res.status(400).json({ error: "User id required" });
         if (id === admin.id) return res.status(400).json({ error: "Cannot delete yourself" });
+        // Only owner can delete admins
+        const targetUser = await _query("SELECT role FROM users WHERE id = $1", [id]);
+        if (targetUser.length > 0 && targetUser[0].role === 'owner') return res.status(400).json({ error: "Tidak dapat menghapus owner" });
+        if (targetUser.length > 0 && targetUser[0].role === 'admin') {
+          const caller = await _query("SELECT role FROM users WHERE id = $1", [admin.id]);
+          if (caller.length === 0 || caller[0].role !== 'owner') return res.status(403).json({ error: "Hanya owner yang dapat menghapus admin" });
+        }
         // Delete user's comments first, then user
         await _query("DELETE FROM comments WHERE user_id = $1", [id]);
         await _query("DELETE FROM users WHERE id = $1", [id]);
