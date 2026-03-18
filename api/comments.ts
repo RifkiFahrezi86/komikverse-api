@@ -51,6 +51,14 @@ function getUser(req: VercelRequest): JwtPayload | null {
   try { return _jwt.verify(token, JWT_SECRET) as JwtPayload; } catch { return null; }
 }
 
+async function getUserWithFreshRole(req: VercelRequest): Promise<JwtPayload | null> {
+  const payload = getUser(req);
+  if (!payload) return null;
+  const rows = await _query("SELECT id, username, role FROM users WHERE id = $1", [payload.id]);
+  if (rows.length === 0) return null;
+  return { ...payload, role: rows[0].role };
+}
+
 function sanitizeComment(str: string): string {
   return str.replace(/<[^>]*>/g, "").trim().slice(0, 2000);
 }
@@ -150,14 +158,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // DELETE /api/comments?id=xxx
     if (req.method === "DELETE") {
-      const user = getUser(req);
+      const user = await getUserWithFreshRole(req);
       if (!user) return res.status(401).json({ error: "Not authenticated" });
 
       const id = parseInt(String(req.query.id));
       if (!id) return res.status(400).json({ error: "Comment id required" });
 
-      // Users can delete own comments, admins can delete any
-      if (user.role === "admin") {
+      // Users can delete own comments, admins/owners can delete any
+      if (user.role === "admin" || user.role === "owner") {
         await _query("DELETE FROM comments WHERE id = $1", [id]);
       } else {
         const result = await _query("DELETE FROM comments WHERE id = $1 AND user_id = $2", [id, user.id]);
@@ -173,8 +181,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // PATCH /api/comments - admin only, update status
     if (req.method === "PATCH") {
-      const user = getUser(req);
-      if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin only" });
+      const user = await getUserWithFreshRole(req);
+      if (!user || (user.role !== "admin" && user.role !== "owner")) return res.status(403).json({ error: "Admin only" });
 
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
       const id = parseInt(body.id);

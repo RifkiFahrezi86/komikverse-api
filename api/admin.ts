@@ -87,8 +87,18 @@ function getAdmin(req: VercelRequest): any {
   if (!token) return null;
   try {
     const payload = _jwt.verify(token, JWT_SECRET) as any;
-    return (payload.role === "admin" || payload.role === "owner") ? payload : null;
+    return payload;
   } catch { return null; }
+}
+
+async function verifyAdmin(req: VercelRequest): Promise<any> {
+  const payload = getAdmin(req);
+  if (!payload) return null;
+  const rows = await _query("SELECT id, username, role FROM users WHERE id = $1", [payload.id]);
+  if (rows.length === 0) return null;
+  const user = rows[0];
+  if (user.role !== 'admin' && user.role !== 'owner') return null;
+  return { ...payload, role: user.role };
 }
 
 // ─── Fake data pools ───
@@ -318,7 +328,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const admin = getAdmin(req);
+  const admin = await verifyAdmin(req);
   if (!admin) return res.status(403).json({ error: "Admin access required" });
 
   const path = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
