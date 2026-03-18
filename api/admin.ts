@@ -214,12 +214,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
   await loadAll();
 
-  // Analytics endpoint — admin auth required
+  // Analytics endpoint — public (used by API dashboard page)
   const earlyPath = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
   const earlyResource = earlyPath.split("/")[0] || "";
   if (earlyResource === "analytics" && req.method === "GET") {
-    const analyticsAdmin = getAdmin(req);
-    if (!analyticsAdmin) return res.status(403).json({ error: "Admin access required" });
     try {
       await _query(`
         CREATE TABLE IF NOT EXISTS api_analytics (
