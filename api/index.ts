@@ -1126,13 +1126,21 @@ const providers: Record<string, Record<string, (query: any, slug?: string) => Pr
 };
 
 // ─── Analytics Tracking (fire-and-forget) ───
+let _analyticsQuery: any;
 let _analyticsMigrated = false;
 
 async function getAnalyticsDb() {
-  const { query: analyticsQuery } = await import("./lib/db");
+  if (!_analyticsQuery) {
+    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
+    if (!url) return null;
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const sql = neon(url);
+    _analyticsQuery = (text: string, params: unknown[] = []) => sql.query(text, params);
+  }
   if (!_analyticsMigrated) {
     try {
-      await analyticsQuery(`
+      await _analyticsQuery(`
         CREATE TABLE IF NOT EXISTS api_analytics (
           id SERIAL PRIMARY KEY,
           ip_hash VARCHAR(64) NOT NULL,
@@ -1144,12 +1152,12 @@ async function getAnalyticsDb() {
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
       `);
-      await analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_created ON api_analytics(created_at DESC)");
-      await analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_ip ON api_analytics(ip_hash)");
+      await _analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_created ON api_analytics(created_at DESC)");
+      await _analyticsQuery("CREATE INDEX IF NOT EXISTS idx_analytics_ip ON api_analytics(ip_hash)");
     } catch { /* ignore */ }
     _analyticsMigrated = true;
   }
-  return analyticsQuery;
+  return _analyticsQuery;
 }
 
 function hashIP(ip: string): string {

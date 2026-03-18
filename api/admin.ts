@@ -1,14 +1,18 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query as dbQuery } from "./lib/db";
 
-let _query: typeof dbQuery;
+let _query: any;
 let _jwt: any;
 let _bcrypt: any;
 let _seedColsMigrated = false;
 
 async function loadAll() {
   if (!_query) {
-    _query = dbQuery;
+    const neonMod = await import("@neondatabase/serverless");
+    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
+    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
+    if (!url) throw new Error("Database not configured");
+    const sql = neon(url);
+    _query = (text: string, params: unknown[] = []) => sql.query(text, params);
   }
   if (!_jwt) {
     const j = await import("jsonwebtoken");
