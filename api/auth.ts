@@ -129,7 +129,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         u.ad_free_until = null;
         await _query("UPDATE users SET ad_free = false, ad_free_until = NULL WHERE id = $1", [u.id]);
       }
-      return res.status(200).json({ user: u });
+      // Auto-refresh token if it will expire within 3 days
+      let newToken: string | undefined;
+      try {
+        const exp = (payload.exp || 0) * 1000;
+        if (exp - Date.now() < 3 * 24 * 60 * 60 * 1000) {
+          newToken = _jwt.sign({ id: u.id, username: u.username, role: u.role }, JWT_SECRET, { expiresIn: "30d" });
+          res.setHeader("Set-Cookie", `kv_token=${newToken}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${30 * 24 * 60 * 60}`);
+        }
+      } catch { /* ignore refresh errors */ }
+      return res.status(200).json({ user: u, ...(newToken ? { token: newToken } : {}) });
     }
 
     // PATCH /api/auth/change-password
@@ -183,8 +192,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
 
       const user = result[0];
-      const token = _jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
-      res.setHeader("Set-Cookie", `kv_token=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
+      const token = _jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "30d" });
+      res.setHeader("Set-Cookie", `kv_token=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${30 * 24 * 60 * 60}`);
       return res.status(201).json({ user, token });
     }
 
@@ -205,9 +214,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const valid = await _bcrypt.compare(password, user.password_hash);
       if (!valid) return res.status(401).json({ error: "Username atau password salah" });
 
-      const token = _jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+      const token = _jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "30d" });
       const { password_hash, ...safeUser } = user;
-      res.setHeader("Set-Cookie", `kv_token=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
+      res.setHeader("Set-Cookie", `kv_token=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${30 * 24 * 60 * 60}`);
       return res.status(200).json({ user: safeUser, token });
     }
 
