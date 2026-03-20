@@ -242,6 +242,7 @@ function transformComic(m: any) {
     genre: m.taxonomy?.Genre?.map((g: { name: string }) => g.name).join(", "),
     status: getStatusText(m.status),
     author: m.taxonomy?.Author?.map((a: { name: string }) => a.name).join(", "),
+    view_count: m.view_count || undefined,
   };
 }
 
