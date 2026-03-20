@@ -612,35 +612,42 @@ function kiryuuParseListPage($: cheerio.CheerioAPI): any[] {
   return comics;
 }
 
-// Resolve missing types for Kiryuu comics using WP REST API batch query
+// Resolve/verify types for ALL Kiryuu comics using WP REST API batch query
 async function kiryuuResolveTypes(comics: any[]): Promise<any[]> {
-  const missing = comics.filter(c => !c.type);
-  if (missing.length === 0) return comics;
-  const slugs = missing.map(c => c._slug).filter(Boolean);
-  if (slugs.length === 0) return comics;
+  const slugs = comics.map(c => c._slug).filter(Boolean);
+  if (slugs.length === 0) {
+    for (const c of comics) { delete c._slug; if (!c.type) c.type = "Manga"; }
+    return comics;
+  }
   try {
-    const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${slugs.join(",")}&_embed=wp:term&per_page=${slugs.length}`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const typeMap: Record<string, string> = {};
-      for (const item of data) {
-        const s = item.slug;
-        const terms = item._embedded?.["wp:term"] || [];
-        for (const group of terms) {
-          for (const term of group) {
-            if (term.taxonomy === "type" && term.name && term.name !== "-") {
-              typeMap[s] = term.name;
+    // Batch query all slugs via WP REST API for authoritative type data
+    const batchSize = 30;
+    const typeMap: Record<string, string> = {};
+    for (let i = 0; i < slugs.length; i += batchSize) {
+      const batch = slugs.slice(i, i + batchSize);
+      const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${batch.join(",")}&_embed=wp:term&per_page=${batch.length}`;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        for (const item of data) {
+          const s = item.slug;
+          const terms = item._embedded?.["wp:term"] || [];
+          for (const group of terms) {
+            for (const term of group) {
+              if (term.taxonomy === "type" && term.name && term.name !== "-") {
+                typeMap[s] = term.name;
+              }
             }
           }
         }
       }
-      for (const c of comics) {
-        if (!c.type && c._slug && typeMap[c._slug]) {
-          c.type = typeMap[c._slug];
-        }
+    }
+    // Apply authoritative WP API types to ALL comics (overwrite HTML-detected types)
+    for (const c of comics) {
+      if (c._slug && typeMap[c._slug]) {
+        c.type = typeMap[c._slug];
       }
     }
   } catch { /* fallback to existing types */ }
