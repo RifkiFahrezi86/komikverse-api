@@ -58,6 +58,13 @@ function sanitize(str: string): string {
 }
 
 const authRateLimit = new Map<string, { count: number; resetAt: number }>();
+// Cleanup expired entries every 5 minutes to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of authRateLimit) {
+    if (now > entry.resetAt) authRateLimit.delete(ip);
+  }
+}, 5 * 60 * 1000);
 function isAuthRateLimited(ip: string): boolean {
   const now = Date.now();
   const entry = authRateLimit.get(ip);
@@ -86,6 +93,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const path = (req.url || "").split("?")[0].replace(/^\/api\/auth\/?/, "");
     const action = path.split("/")[0] || "";
 
+    // GET /api/auth/streak-leaderboard — public endpoint
+    if (req.method === "GET" && action === "streak-leaderboard") {
+      const limit = Math.min(Math.max(parseInt(String(req.query?.limit || "20")), 1), 50);
+      const rows = await _query(
+        "SELECT username, avatar_url, current_streak, longest_streak FROM users WHERE current_streak > 0 ORDER BY current_streak DESC, longest_streak DESC LIMIT $1",
+        [limit]
+      );
+      const data = rows.map((row: any, i: number) => ({
+        rank: i + 1,
+        username: row.username,
+        avatar_url: row.avatar_url,
+        current_streak: row.current_streak,
+        longest_streak: row.longest_streak,
+      }));
+      return res.status(200).json({ status: "success", data });
+    }
+
     // GET /api/auth/me
     if (req.method === "GET" && action === "me") {
       const token = getTokenFromRequest(req);
@@ -94,11 +118,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try { payload = _jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: "Invalid token" }); }
 
       const rows = await _query(
-        "SELECT id, username, email, role, avatar_url, ad_free, created_at FROM users WHERE id = $1",
+        "SELECT id, username, email, role, avatar_url, ad_free, ad_free_until, current_streak, longest_streak, created_at FROM users WHERE id = $1",
         [payload.id]
       );
       if (rows.length === 0) return res.status(401).json({ error: "User not found" });
-      return res.status(200).json({ user: rows[0] });
+      const u = rows[0];
+      // Check if ad_free_until has expired
+      if (u.ad_free_until && new Date(u.ad_free_until) < new Date()) {
+        u.ad_free = false;
+        u.ad_free_until = null;
+        await _query("UPDATE users SET ad_free = false, ad_free_until = NULL WHERE id = $1", [u.id]);
+      }
+      return res.status(200).json({ user: u });
     }
 
     // PATCH /api/auth/change-password
@@ -184,6 +215,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === "logout") {
       res.setHeader("Set-Cookie", "kv_token=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0");
       return res.status(200).json({ success: true });
+    }
+
+    // POST /api/auth/sync-streak — sync user's reading streak from client
+    if (action === "sync-streak") {
+      const token = getTokenFromRequest(req);
+      if (!token) return res.status(401).json({ error: "Not authenticated" });
+      let payload: any;
+      try { payload = _jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: "Invalid token" }); }
+
+      const currentStreak = Math.max(0, Math.min(parseInt(String(body.current_streak || 0)), 9999));
+      const longestStreak = Math.max(0, Math.min(parseInt(String(body.longest_streak || 0)), 9999));
+      const lastReadDate = String(body.last_read_date || "").match(/^\d{4}-\d{2}-\d{2}$/) ? body.last_read_date : null;
+
+      if (isNaN(currentStreak) || isNaN(longestStreak)) return res.status(400).json({ error: "Invalid streak values" });
+
+      // Update streak, and grant ad-free if streak >= 30
+      let adFreeUntil = null;
+      if (currentStreak >= 30) {
+        adFreeUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      await _query(
+        `UPDATE users SET current_streak = $1, longest_streak = GREATEST(longest_streak, $2), last_read_date = $3, ad_free = CASE WHEN $4::text IS NOT NULL THEN true ELSE ad_free END, ad_free_until = CASE WHEN $4::text IS NOT NULL THEN $4::timestamp ELSE ad_free_until END, updated_at = NOW() WHERE id = $5`,
+        [currentStreak, longestStreak, lastReadDate, adFreeUntil, payload.id]
+      );
+
+      return res.status(200).json({ success: true, ad_free_until: adFreeUntil });
     }
 
     return res.status(404).json({ error: "Not found" });

@@ -46,10 +46,10 @@ async function loadAll() {
       await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
         ('popup-global', 'Popup/Interstitial (Seluruh Halaman)', 'global', false),
         ('native-home', 'Native Banner Homepage', 'home', false),
-        ('native-detail', 'Native Banner Detail Page', 'detail', false),
-        ('popunder-global', 'Popunder (Seluruh Halaman)', 'global', false),
-        ('socialbar-global', 'Social Bar (Seluruh Halaman)', 'global', false)
+        ('native-detail', 'Native Banner Detail Page', 'detail', false)
         ON CONFLICT (slot_name) DO NOTHING`);
+      // Remove deprecated ad slots
+      await _query("DELETE FROM ad_placements WHERE slot_name IN ('popunder-global', 'socialbar-global')");
     } catch { /* ignore if already exists or table missing */ }
     _seedColsMigrated = true;
   }
@@ -625,6 +625,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const rows = await _query("SELECT * FROM ad_placements ORDER BY id");
         return res.status(200).json({ ads: rows });
       }
+      if (req.method === "POST") {
+        const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+        const slotName = String(body.slot_name || "").replace(/[^a-zA-Z0-9\-_]/g, "").slice(0, 100);
+        const label = String(body.label || "").slice(0, 255);
+        const position = String(body.position || "home").replace(/[^a-zA-Z0-9\-_]/g, "").slice(0, 50);
+        const adSize = String(body.ad_size || "").slice(0, 50);
+        if (!slotName || !label) return res.status(400).json({ error: "slot_name dan label wajib diisi" });
+        // Check duplicate
+        const existing = await _query("SELECT id FROM ad_placements WHERE slot_name = $1", [slotName]);
+        if (existing.length > 0) return res.status(409).json({ error: "Slot name sudah ada" });
+        await _query(
+          "INSERT INTO ad_placements (slot_name, label, position, ad_code, is_active) VALUES ($1, $2, $3, '', false)",
+          [slotName, label, position]
+        );
+        return res.status(201).json({ success: true });
+      }
       if (req.method === "PUT") {
         const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
         const id = parseInt(body.id);
@@ -637,6 +653,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "UPDATE ad_placements SET ad_code = $1, is_active = $2, updated_at = NOW() WHERE id = $3",
           [adCode, isActive, id]
         );
+        return res.status(200).json({ success: true });
+      }
+      if (req.method === "DELETE") {
+        const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+        const id = parseInt(body.id);
+        if (!id) return res.status(400).json({ error: "Ad id required" });
+        await _query("DELETE FROM ad_placements WHERE id = $1", [id]);
         return res.status(200).json({ success: true });
       }
     }

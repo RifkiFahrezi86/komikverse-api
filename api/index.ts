@@ -11,6 +11,13 @@ const API_SECRET = process.env.API_SECRET || "";
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 60; // max requests per window
 const RATE_LIMIT_WINDOW = 60_000; // 1 minute
+// Cleanup expired entries every 5 minutes to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitMap) {
+    if (now > entry.resetAt) rateLimitMap.delete(key);
+  }
+}, 5 * 60 * 1000);
 
 function getRateLimitKey(req: VercelRequest): string {
   const forwarded = req.headers["x-forwarded-for"];

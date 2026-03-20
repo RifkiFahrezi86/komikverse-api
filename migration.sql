@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(50) UNIQUE NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'owner')),
   avatar_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -80,3 +80,30 @@ ON CONFLICT (key) DO NOTHING;
 INSERT INTO users (username, email, password_hash, role) VALUES
   ('admin', 'admin@komikverse.com', '$2b$10$VFfeR324ey/yLn/h/aK2EumR0wQJeDM6I96nclKRN2EgajssQf/DC', 'admin')
 ON CONFLICT (username) DO NOTHING;
+
+-- ═══════════════════════════════════════
+-- Phase 37: View tracking & Streak leaderboard
+-- ═══════════════════════════════════════
+
+-- Comic view tracking table
+CREATE TABLE IF NOT EXISTS comic_views (
+  id SERIAL PRIMARY KEY,
+  comic_slug VARCHAR(255) NOT NULL UNIQUE,
+  comic_title VARCHAR(500),
+  comic_image TEXT,
+  comic_type VARCHAR(50),
+  view_count INTEGER DEFAULT 0,
+  weekly_views INTEGER DEFAULT 0,
+  last_weekly_reset TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_comic_views_weekly ON comic_views(weekly_views DESC);
+CREATE INDEX IF NOT EXISTS idx_comic_views_total ON comic_views(view_count DESC);
+CREATE INDEX IF NOT EXISTS idx_comic_views_type ON comic_views(comic_type);
+
+-- User streak tracking columns for leaderboard
+ALTER TABLE users ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_read_date DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free_until TIMESTAMP WITH TIME ZONE;
