@@ -246,7 +246,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       await _query(
-        `UPDATE users SET current_streak = $1, longest_streak = GREATEST(longest_streak, $2), last_read_date = $3, ad_free = CASE WHEN $4::text IS NOT NULL THEN true ELSE ad_free END, ad_free_until = CASE WHEN $4::text IS NOT NULL THEN $4::timestamp ELSE ad_free_until END, updated_at = NOW() WHERE id = $5`,
+        `UPDATE users SET current_streak = GREATEST(current_streak, $1), longest_streak = GREATEST(longest_streak, $2), last_read_date = CASE WHEN $3::date > COALESCE(last_read_date, '1970-01-01'::date) THEN $3::date ELSE last_read_date END, ad_free = CASE WHEN $4::text IS NOT NULL THEN true ELSE ad_free END, ad_free_until = CASE WHEN $4::text IS NOT NULL THEN $4::timestamp ELSE ad_free_until END, updated_at = NOW() WHERE id = $5`,
         [currentStreak, longestStreak, lastReadDate, adFreeUntil, payload.id]
       );
 

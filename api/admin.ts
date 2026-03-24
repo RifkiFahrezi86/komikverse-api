@@ -44,9 +44,11 @@ async function loadAll() {
       await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
       // Ensure new ad slots exist
       await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
-        ('popup-global', 'Popup/Interstitial (Seluruh Halaman)', 'global', false),
-        ('native-home', 'Native Banner Homepage', 'home', false),
-        ('native-detail', 'Native Banner Detail Page', 'detail', false)
+        ('popup-global', 'Banner di Bawah Navbar (Global)', 'global', false),
+        ('native-detail', 'Native Banner Detail Page', 'detail', false),
+        ('home-bottom-1', 'Banner Bawah Homepage 1', 'home', false),
+        ('home-bottom-2', 'Banner Bawah Homepage 2', 'home', false),
+        ('browse-banner', 'Banner Genre & Pencarian', 'home', false)
         ON CONFLICT (slot_name) DO NOTHING`);
       // Remove deprecated ad slots
       await _query("DELETE FROM ad_placements WHERE slot_name IN ('popunder-global', 'socialbar-global')");
