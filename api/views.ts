@@ -99,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ status: "success", data: { view_count: rows[0].view_count } });
     }
 
-    // POST /api/views/batch — get view counts for multiple slugs
+    // POST /api/views/batch — get view counts for multiple slugs (cache 2 min)
     if (req.method === "POST" && action === "batch") {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
       const slugs: string[] = Array.isArray(body.slugs) ? body.slugs.slice(0, 50).map((s: string) => sanitizeSlug(String(s))) : [];
@@ -148,6 +148,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         weekly_views: row.weekly_views,
       }));
 
+      // Cache leaderboard for 5 min at edge
+      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+
       return res.status(200).json({ status: "success", data });
     }
 
@@ -155,6 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "GET" && action) {
       const slug = sanitizeSlug(action);
       const rows = await _query("SELECT view_count, weekly_views FROM comic_views WHERE comic_slug = $1", [slug]);
+      // Cache individual view count for 3 min at edge
+      res.setHeader("Cache-Control", "public, s-maxage=180, stale-while-revalidate=300");
       if (rows.length === 0) return res.status(200).json({ status: "success", data: { view_count: 0, weekly_views: 0 } });
       return res.status(200).json({ status: "success", data: rows[0] });
     }

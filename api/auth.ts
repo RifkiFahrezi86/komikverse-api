@@ -107,6 +107,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         current_streak: row.current_streak,
         longest_streak: row.longest_streak,
       }));
+      // Cache leaderboard at edge for 5 min
+      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
       return res.status(200).json({ status: "success", data });
     }
 

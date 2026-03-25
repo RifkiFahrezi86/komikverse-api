@@ -1273,8 +1273,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Track request (fire-and-forget, non-blocking)
     trackRequest(req, `/${route}${slug ? "/" + slug : ""}`, provider);
 
-    // Cache control — public cache for 2 min, stale-while-revalidate for 5 min
-    res.setHeader("Cache-Control", "public, s-maxage=120, stale-while-revalidate=300");
+    // Route-specific cache control to minimize edge requests
+    const cacheMap: Record<string, string> = {
+      genre:       "public, s-maxage=600, stale-while-revalidate=1800",  // 10 min + 30 min stale
+      recommended: "public, s-maxage=300, stale-while-revalidate=600",   // 5 min + 10 min stale
+      popular:     "public, s-maxage=300, stale-while-revalidate=600",   // 5 min + 10 min stale
+      detail:      "public, s-maxage=300, stale-while-revalidate=900",   // 5 min + 15 min stale
+      terbaru:     "public, s-maxage=120, stale-while-revalidate=300",   // 2 min + 5 min stale
+      search:      "public, s-maxage=120, stale-while-revalidate=300",   // 2 min + 5 min stale
+      read:        "public, s-maxage=600, stale-while-revalidate=3600",  // 10 min + 1 hr stale (panels rarely change)
+      health:      "no-cache",
+    };
+    res.setHeader("Cache-Control", cacheMap[route] || "public, s-maxage=120, stale-while-revalidate=300");
 
     return res.status(statusCode).json(result);
   } catch (error) {
