@@ -240,9 +240,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
   await loadAll();
 
-  // Analytics endpoint — public (used by API dashboard page)
+  // Public endpoints (used by API dashboard page — no auth required)
   const earlyPath = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
   const earlyResource = earlyPath.split("/")[0] || "";
+
+  // ─── Clear Old Analytics (public, used by dashboard) ───
+  if (earlyResource === "clear-monthly" && req.method === "POST") {
+    await _query("DELETE FROM api_analytics WHERE created_at < date_trunc('month', CURRENT_DATE)");
+    return res.status(200).json({ success: true, message: "Data bulan lalu berhasil dihapus" });
+  }
+
   if (earlyResource === "analytics" && req.method === "GET") {
     try {
       await _query(`
@@ -398,11 +405,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // ─── Clear Monthly Analytics ───
-    if (resource === "clear-monthly" && req.method === "POST") {
-      await _query("DELETE FROM api_analytics WHERE created_at < date_trunc('month', CURRENT_DATE)");
-      return res.status(200).json({ success: true, message: "Data bulan lalu berhasil dihapus" });
-    }
+    // clear-monthly moved to public section above
 
     // ─── Users ───
     if (resource === "users") {
