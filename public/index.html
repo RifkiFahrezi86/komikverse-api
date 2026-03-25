@@ -126,6 +126,13 @@
 
     .empty { text-align: center; padding: 32px 16px; color: var(--text-dim); font-size: 14px; }
 
+    /* === MONTHLY BARS === */
+    .m-bar { display: flex; align-items: center; gap: 8px; padding: 3px 16px; }
+    .m-bar-dt { font-size: 12px; color: var(--text-dim); width: 56px; text-align: right; flex-shrink: 0; font-family: var(--mono); }
+    .m-bar-track { flex: 1; height: 22px; background: rgba(255,255,255,0.03); border-radius: 11px; overflow: hidden; position: relative; }
+    .m-bar-fill { height: 100%; border-radius: 11px; background: linear-gradient(90deg, rgba(249,115,22,0.5), var(--orange)); transition: width 0.4s ease; }
+    .m-bar-lbl { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; color: rgba(255,255,255,0.5); font-family: var(--mono); white-space: nowrap; }
+
     /* === RESPONSIVE === */
     @media (max-width: 900px) {
       .stats { grid-template-columns: repeat(2, 1fr); }
@@ -218,6 +225,27 @@
     <div class="chart-t">Traffic 30 Hari Terakhir</div>
     <div class="chart-s">Request harian - Pengunjung unik per hari</div>
     <div class="chart-area"><canvas id="cTraffic"></canvas></div>
+  </div>
+
+  <!-- Monthly Notes -->
+  <div class="sec">
+    <span class="sec-t">Catatan Bulan Ini</span>
+    <span class="badge" id="mMonth">--</span>
+  </div>
+  <div class="stats" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 16px;">
+    <div class="st">
+      <div class="st-num c1 ld" id="mReq">--</div>
+      <div class="st-lbl">Request Bulan Ini</div>
+    </div>
+    <div class="st">
+      <div class="st-num c2 ld" id="mVis">--</div>
+      <div class="st-lbl">Pengunjung Bulan Ini</div>
+    </div>
+  </div>
+  <div class="chart-box" id="mChartWrap" style="display:none">
+    <div class="chart-t">Aktivitas Harian Bulan Ini</div>
+    <div class="chart-s">Request & pengunjung per hari bulan ini</div>
+    <div style="padding:4px 0" id="mBars"></div>
   </div>
 
   <!-- Daftar Pengunjung -->
@@ -381,6 +409,7 @@ fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(func
   rrk('cProv', d.top_providers || [], 'provider', 'count', false);
   rrk('cCountry', d.top_countries || [], 'country', 'count', true);
   dtc(d.daily_30d || []);
+  rmo(d.monthly || {});
 }).catch(function() {
   ['vVisit','vReq','vDay','vWk'].forEach(function(id) { sv(id, '0'); });
   $('tVisit').innerHTML = '<tr><td colspan="7" class="empty">Gagal memuat data</td></tr>';
@@ -548,6 +577,35 @@ window.addEventListener('resize', function() {
     fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(function(d) { dtc(d.daily_30d || []); });
   }, 300);
 });
+
+/* Monthly Notes */
+function rmo(m) {
+  var months = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  var now = new Date();
+  $('mMonth').textContent = months[now.getMonth()] + ' ' + now.getFullYear();
+  sv('mReq', fn(m.requests || 0));
+  sv('mVis', fn(m.visitors || 0));
+
+  var days = m.daily_activity || [];
+  if (!days.length) return;
+  $('mChartWrap').style.display = '';
+  var maxR = Math.max.apply(null, days.map(function(d) { return parseInt(d.requests) || 0; })) || 1;
+  var h = '';
+  days.slice(0, 14).forEach(function(d) {
+    var dt = new Date(d.date);
+    var dl = dt.getDate() + '/' + (dt.getMonth() + 1);
+    var req = parseInt(d.requests) || 0;
+    var vis = parseInt(d.visitors) || 0;
+    var pct = Math.max(2, (req / maxR) * 100);
+    h += '<div class="m-bar">'
+      + '<span class="m-bar-dt">' + dl + '</span>'
+      + '<div class="m-bar-track">'
+      + '<div class="m-bar-fill" style="width:' + pct + '%"></div>'
+      + '<span class="m-bar-lbl">' + fn(req) + ' req · ' + vis + ' visitor</span>'
+      + '</div></div>';
+  });
+  $('mBars').innerHTML = h;
+}
 </script>
 </body>
 </html>

@@ -275,6 +275,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       topComics,
       recentComicClicks,
       recentVisitors,
+      monthRequests,
+      monthVisitors,
+      monthDailyActivity,
     ] = await Promise.all([
       _query("SELECT COUNT(*) as count FROM api_analytics"),
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics"),
@@ -309,6 +312,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               FROM api_analytics 
               GROUP BY ip_hash 
               ORDER BY last_seen DESC LIMIT 30`),
+      _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
+      _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
+      _query(`SELECT DATE(created_at) as date, COUNT(*) as requests, COUNT(DISTINCT ip_hash) as visitors 
+              FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE) 
+              GROUP BY DATE(created_at) ORDER BY date DESC`),
     ]);
 
     return res.status(200).json({
@@ -327,6 +335,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       top_comics: topComics,
       recent_comic_clicks: recentComicClicks,
       recent_visitors: recentVisitors,
+      monthly: {
+        requests: parseInt(monthRequests[0]?.count || "0"),
+        visitors: parseInt(monthVisitors[0]?.count || "0"),
+        daily_activity: monthDailyActivity,
+      },
     });
   }
 
