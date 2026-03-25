@@ -357,7 +357,8 @@ function pd(ua) {
   return 'Desktop';
 }
 
-function es(ep) {
+function es(ep, title) {
+  if (title) return title;
   var m = ep.match(/\/detail\/(.+)/);
   if (!m) return ep;
   return decodeURIComponent(m[1]).replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
@@ -446,7 +447,7 @@ function rtc(items) {
   if (!items.length) { $('cComic').innerHTML = '<div class="empty">Belum ada data</div>'; return; }
   var h = '';
   items.forEach(function(c, i) {
-    var name = es(c.endpoint);
+    var name = es(c.endpoint, c.comic_title);
     h += '<div class="rk">'
       + '<span class="rk-n">#' + (i+1) + '</span>'
       + '<span class="rk-t comic-n">' + name + '</span>'
@@ -460,7 +461,7 @@ function rcc(items) {
   if (!items.length) { $('tClick').innerHTML = '<tr><td colspan="4" class="empty">Belum ada klik</td></tr>'; return; }
   var h = '';
   items.forEach(function(c) {
-    var name = es(c.endpoint);
+    var name = es(c.endpoint, c.comic_title);
     var sh = c.ip_hash ? c.ip_hash.substring(0, 6) : '?';
     h += '<tr>'
       + '<td><span class="hash">' + sh + '</span> ' + cf(c.country) + '</td>'

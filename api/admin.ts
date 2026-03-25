@@ -303,12 +303,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               FROM api_analytics ORDER BY created_at DESC LIMIT 20`),
       _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
-      _query(`SELECT endpoint, COUNT(*) as count, COUNT(DISTINCT ip_hash) as unique_viewers 
-              FROM api_analytics WHERE endpoint LIKE '/detail/%' 
-              GROUP BY endpoint ORDER BY count DESC LIMIT 15`),
-      _query(`SELECT ip_hash, endpoint, provider, country, user_agent, created_at 
-              FROM api_analytics WHERE endpoint LIKE '/detail/%' 
-              ORDER BY created_at DESC LIMIT 30`),
+      _query(`SELECT a.endpoint, COUNT(*) as count, COUNT(DISTINCT a.ip_hash) as unique_viewers,
+              MAX(cv.comic_title) as comic_title
+              FROM api_analytics a
+              LEFT JOIN comic_views cv ON cv.comic_slug = REPLACE(a.endpoint, '/detail/', '')
+              WHERE a.endpoint LIKE '/detail/%' 
+              GROUP BY a.endpoint ORDER BY count DESC LIMIT 15`).catch(() => []),
+      _query(`SELECT a.ip_hash, a.endpoint, a.provider, a.country, a.user_agent, a.created_at,
+              cv.comic_title
+              FROM api_analytics a
+              LEFT JOIN comic_views cv ON cv.comic_slug = REPLACE(a.endpoint, '/detail/', '')
+              WHERE a.endpoint LIKE '/detail/%' 
+              ORDER BY a.created_at DESC LIMIT 30`).catch(() => []),
       _query(`SELECT ip_hash, COUNT(*) as total_requests,
                      COUNT(DISTINCT endpoint) as pages_viewed,
                      COUNT(CASE WHEN endpoint LIKE '/detail/%' THEN 1 END) as comic_clicks,
