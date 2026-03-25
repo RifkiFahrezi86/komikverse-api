@@ -346,6 +346,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         _query("SELECT COUNT(*) as count FROM users WHERE is_seed = true"),
       ]);
 
+      // Monthly stats
+      const [monthUsers, monthComments, monthViews, monthTopComics, dailyActivity] = await Promise.all([
+        _query("SELECT COUNT(*) as count FROM users WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
+        _query("SELECT COUNT(*) as count FROM comments WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
+        _query("SELECT COALESCE(SUM(view_count), 0) as total, COUNT(*) as comics FROM comic_views").catch(() => [{ total: 0, comics: 0 }]),
+        _query(`SELECT comic_slug, comic_title, comic_type, view_count, weekly_views 
+                FROM comic_views ORDER BY view_count DESC LIMIT 5`).catch(() => []),
+        _query(`SELECT DATE(created_at) as date, COUNT(*) as requests, COUNT(DISTINCT ip_hash) as visitors 
+                FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE) 
+                GROUP BY DATE(created_at) ORDER BY date DESC`).catch(() => []),
+      ]);
+
       const recentComments = await _query(
         `SELECT c.id, c.content, c.comic_slug, c.comic_title, c.status, c.created_at,
                 u.username, u.role as user_role
@@ -361,8 +373,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           active_ads: parseInt(activeAds[0].count),
           seed_users: parseInt(seedUsers[0].count),
         },
+        monthly: {
+          new_users: parseInt(monthUsers[0]?.count || "0"),
+          new_comments: parseInt(monthComments[0]?.count || "0"),
+          total_views: parseInt(monthViews[0]?.total || "0"),
+          tracked_comics: parseInt(monthViews[0]?.comics || "0"),
+          top_comics: monthTopComics,
+          daily_activity: dailyActivity,
+        },
         recent_comments: recentComments,
       });
+    }
+
+    // ─── Clear Monthly Analytics ───
+    if (resource === "clear-monthly" && req.method === "POST") {
+      await _query("DELETE FROM api_analytics WHERE created_at < date_trunc('month', CURRENT_DATE)");
+      return res.status(200).json({ success: true, message: "Data bulan lalu berhasil dihapus" });
     }
 
     // ─── Users ───
