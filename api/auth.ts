@@ -235,20 +235,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let payload: any;
       try { payload = _jwt.verify(token, JWT_SECRET); } catch { return res.status(401).json({ error: "Invalid token" }); }
 
-      const currentStreak = Math.max(0, Math.min(parseInt(String(body.current_streak || 0)), 9999));
-      const longestStreak = Math.max(0, Math.min(parseInt(String(body.longest_streak || 0)), 9999));
+      const currentStreak = Math.max(0, Math.min(parseInt(String(body.current_streak || 0)) || 0, 365));
+      const longestStreak = Math.max(0, Math.min(parseInt(String(body.longest_streak || 0)) || 0, 365));
       const lastReadDate = String(body.last_read_date || "").match(/^\d{4}-\d{2}-\d{2}$/) ? body.last_read_date : null;
 
-      if (isNaN(currentStreak) || isNaN(longestStreak)) return res.status(400).json({ error: "Invalid streak values" });
+      // Validate date is not in the future
+      if (lastReadDate) {
+        const d = new Date(lastReadDate);
+        if (isNaN(d.getTime()) || d > new Date(Date.now() + 86400000)) {
+          return res.status(400).json({ error: "Invalid date" });
+        }
+      }
 
-      // Update streak, and grant ad-free if streak >= 30
+      // Update streak — allow reset to 0 (no GREATEST)
+      // longest_streak only goes up (GREATEST)
       let adFreeUntil = null;
       if (currentStreak >= 30) {
         adFreeUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       }
 
       await _query(
-        `UPDATE users SET current_streak = GREATEST(current_streak, $1), longest_streak = GREATEST(longest_streak, $2), last_read_date = CASE WHEN $3::date > COALESCE(last_read_date, '1970-01-01'::date) THEN $3::date ELSE last_read_date END, ad_free = CASE WHEN $4::text IS NOT NULL THEN true ELSE ad_free END, ad_free_until = CASE WHEN $4::text IS NOT NULL THEN $4::timestamp ELSE ad_free_until END, updated_at = NOW() WHERE id = $5`,
+        `UPDATE users SET current_streak = $1, longest_streak = GREATEST(longest_streak, $2), last_read_date = CASE WHEN $3::date IS NOT NULL THEN $3::date ELSE last_read_date END, ad_free = CASE WHEN $4::text IS NOT NULL THEN true ELSE ad_free END, ad_free_until = CASE WHEN $4::text IS NOT NULL THEN $4::timestamp ELSE ad_free_until END, updated_at = NOW() WHERE id = $5`,
         [currentStreak, longestStreak, lastReadDate, adFreeUntil, payload.id]
       );
 
