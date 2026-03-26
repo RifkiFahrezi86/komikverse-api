@@ -247,15 +247,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Update streak — allow reset to 0 (no GREATEST)
-      // longest_streak only goes up (GREATEST)
+      // Update streak — use GREATEST so client can never lower server streak
+      // This protects against cleared localStorage wiping real streaks
       let adFreeUntil = null;
       if (currentStreak >= 30) {
         adFreeUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       }
 
       await _query(
-        `UPDATE users SET current_streak = $1, longest_streak = GREATEST(longest_streak, $2), last_read_date = CASE WHEN $3::date IS NOT NULL THEN $3::date ELSE last_read_date END, ad_free = CASE WHEN $4::text IS NOT NULL THEN true ELSE ad_free END, ad_free_until = CASE WHEN $4::text IS NOT NULL THEN $4::timestamp ELSE ad_free_until END, updated_at = NOW() WHERE id = $5`,
+        `UPDATE users SET current_streak = GREATEST(current_streak, $1), longest_streak = GREATEST(longest_streak, $2), last_read_date = CASE WHEN $3::date IS NOT NULL THEN $3::date ELSE last_read_date END, ad_free = CASE WHEN $4::text IS NOT NULL THEN true ELSE ad_free END, ad_free_until = CASE WHEN $4::text IS NOT NULL THEN $4::timestamp ELSE ad_free_until END, updated_at = NOW() WHERE id = $5`,
         [currentStreak, longestStreak, lastReadDate, adFreeUntil, payload.id]
       );
 
