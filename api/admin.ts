@@ -44,14 +44,22 @@ async function loadAll() {
       await _query("ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false");
       // Ensure new ad slots exist
       await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
-        ('popup-global', 'Banner di Bawah Navbar (Global)', 'global', false),
-        ('native-detail', 'Native Banner Detail Page', 'detail', false),
-        ('home-bottom-1', 'Banner Bawah Homepage 1', 'home', false),
-        ('home-bottom-2', 'Banner Bawah Homepage 2', 'home', false),
-        ('browse-banner', 'Banner Genre & Pencarian', 'home', false)
+        ('home-top', 'Banner Atas Homepage', 'home', false),
+        ('native-home', 'Native Banner Homepage', 'home', false),
+        ('home-mid', 'Banner Tengah Homepage', 'home', false),
+        ('home-bottom', 'Banner Bawah Homepage', 'home', false),
+        ('detail-before-chapters', 'Banner Sebelum Chapter', 'detail', false),
+        ('detail-sidebar', 'Sidebar Detail Komik', 'detail', false),
+        ('native-detail', 'Native Banner Detail', 'detail', false),
+        ('reader-top', 'Reader Top', 'reader', false),
+        ('reader-between', 'Reader Between Panels', 'reader', false),
+        ('reader-bottom', 'Reader Bottom', 'reader', false),
+        ('browse-bottom', 'Banner Genre & Pencarian', 'browse', false),
+        ('sticky-mobile', 'Sticky Banner Mobile', 'global', false),
+        ('popup-global', 'Popunder Global', 'global', false)
         ON CONFLICT (slot_name) DO NOTHING`);
       // Remove deprecated ad slots
-      await _query("DELETE FROM ad_placements WHERE slot_name IN ('popunder-global', 'socialbar-global')");
+      await _query("DELETE FROM ad_placements WHERE slot_name IN ('popunder-global', 'socialbar-global', 'home-bottom-1', 'home-bottom-2', 'browse-banner')");
     } catch { /* ignore if already exists or table missing */ }
     _seedColsMigrated = true;
   }
