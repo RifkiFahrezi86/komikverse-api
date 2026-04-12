@@ -96,12 +96,21 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<unkno
 
 // ─── HTML Scraping Utility ───
 async function fetchHTML(url: string): Promise<cheerio.CheerioAPI> {
-  // Use native fetch for broader compatibility (some sites block undici)
   const res = await fetch(url, {
     headers: {
-      "User-Agent": DEFAULT_HEADERS["User-Agent"],
-      Accept: "text/html,application/xhtml+xml",
-      "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Cache-Control": "no-cache",
+      "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24"',
+      "Sec-Ch-Ua-Mobile": "?0",
+      "Sec-Ch-Ua-Platform": '"Windows"',
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
     },
   });
   const html = await res.text();
@@ -565,10 +574,16 @@ async function fetchHTMLPost(url: string, postBody: string): Promise<cheerio.Che
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      "User-Agent": DEFAULT_HEADERS["User-Agent"],
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       "Content-Type": "application/x-www-form-urlencoded",
       "HX-Request": "true",
-      Accept: "text/html,application/xhtml+xml",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24"',
+      "Sec-Ch-Ua-Mobile": "?0",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
     },
     body: postBody,
   });
