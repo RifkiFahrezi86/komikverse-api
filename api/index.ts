@@ -96,7 +96,7 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<unkno
 
 // ─── HTML Scraping Utility ───
 async function fetchHTML(url: string): Promise<cheerio.CheerioAPI> {
-  const res = await fetch(url, {
+  const { statusCode, body } = await request(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -113,8 +113,8 @@ async function fetchHTML(url: string): Promise<cheerio.CheerioAPI> {
       "Upgrade-Insecure-Requests": "1",
     },
   });
-  const html = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
+  const html = await body.text();
+  if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
   return cheerio.load(html);
 }
 
@@ -571,7 +571,7 @@ const KIRYUU_BASE = "https://v3.kiryuu.to";
 
 // Fetch HTML for Kiryuu POST (admin-ajax search)
 async function fetchHTMLPost(url: string, postBody: string): Promise<cheerio.CheerioAPI> {
-  const res = await fetch(url, {
+  const { statusCode, body: resBody } = await request(url, {
     method: "POST",
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -587,8 +587,8 @@ async function fetchHTMLPost(url: string, postBody: string): Promise<cheerio.Che
     },
     body: postBody,
   });
-  const html = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
+  const html = await resBody.text();
+  if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
   return cheerio.load(html);
 }
 
