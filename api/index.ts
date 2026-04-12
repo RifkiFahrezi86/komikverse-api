@@ -1291,6 +1291,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     console.error("API Error:", errMsg, error);
-    return res.status(500).json(apiError("Internal server error"));
+    return res.status(500).json(apiError("Internal server error: " + errMsg));
   }
 }
