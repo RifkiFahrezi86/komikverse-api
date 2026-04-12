@@ -556,8 +556,8 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
   health: async () => ({ status: "ok", provider: "komiku", timestamp: new Date().toISOString() }),
 };
 
-// ─── Kiryuu Provider (v1.kiryuu.to) ───
-const KIRYUU_BASE = "https://v1.kiryuu.to";
+// ─── Kiryuu Provider (v3.kiryuu.to) ───
+const KIRYUU_BASE = "https://v3.kiryuu.to";
 
 // Fetch HTML for Kiryuu POST (admin-ajax search)
 async function fetchHTMLPost(url: string, body: string): Promise<cheerio.CheerioAPI> {
@@ -588,7 +588,7 @@ function kiryuuParseListPage($: cheerio.CheerioAPI): any[] {
     if (!title) return;
     const link = $el.find("a[href*='/manga/']").first();
     const href = link.attr("href") || "";
-    const slug = href.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+    const slug = href.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
     if (!slug || slug.includes("?")) return;
     const img = $el.find(".wp-post-image").first();
     const thumbnail = img.attr("src") || img.attr("data-src") || "";
@@ -699,7 +699,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     $("#searchResults a[href*='/manga/'], a[href*='/manga/']").each((_, el) => {
       const $a = $(el);
       const href = $a.attr("href") || "";
-      const slug = href.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+      const slug = href.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
       if (!slug || slug.includes("?") || slug.includes("advanced")) return;
       const title = $a.find("h3").text().trim();
       const img = $a.find("img");
@@ -780,7 +780,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
         const chTitle = $ch.find("span").first().text().trim() || `Chapter ${chNum}`;
         const chDate = $ch.find("time").attr("datetime") || "";
         if (!chHref) return;
-        const path = chHref.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+        const path = chHref.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
         const parts = path.split("/");
         if (parts.length < 2) return;
         const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
@@ -838,7 +838,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
       $("a:contains('Next')").attr("href") || "";
     const encodeNav = (href: string): string | undefined => {
       if (!href) return undefined;
-      const p = href.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+      const p = href.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
       const ps = p.split("/");
       return ps.length >= 2 ? `${ps[0]}--${ps.slice(1).join("/")}` : undefined;
     };
@@ -1073,7 +1073,7 @@ async function fetchKiryuuChaptersForMerge(comicTitle: string): Promise<any[]> {
     if (!chHref || !chNum) return;
     const num = parseFloat(chNum);
     if (isNaN(num)) return;
-    const path = chHref.replace(/https?:\/\/v1\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
+    const path = chHref.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
     const parts = path.split("/");
     if (parts.length < 2) return;
     const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
