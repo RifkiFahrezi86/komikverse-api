@@ -681,7 +681,7 @@ async function kiryuuResolveTypes(comics: any[]): Promise<any[]> {
 async function kiryuuFetchWpMangaList(params: string): Promise<{ comics: any[]; totalPages: number }> {
   const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?${params}&_embed=wp:term,wp:featuredmedia`;
   const res = await fetch(url, {
-    headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
+    headers: { Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`WP API error ${res.status}`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -737,7 +737,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     if (!slug) return apiError("Slug required", 400);
     // Fetch full manga data from WP REST API (bypasses Cloudflare HTML blocking)
     const wpRes = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${encodeURIComponent(slug)}&_embed=wp:term,wp:featuredmedia`, {
-      headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
+      headers: { Accept: "application/json" },
     });
     if (!wpRes.ok) throw new Error(`WP API error ${wpRes.status}`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -770,7 +770,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     let chapters: any[] = [];
     try {
       const chRes = await fetch(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaId}&page=1&action=chapter_list`, {
-        headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
+        headers: { Accept: "text/html" },
       });
       if (chRes.ok) {
         const chHtml = await chRes.text();
