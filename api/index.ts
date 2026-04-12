@@ -96,15 +96,16 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<unkno
 
 // ─── HTML Scraping Utility ───
 async function fetchHTML(url: string): Promise<cheerio.CheerioAPI> {
-  const { statusCode, body } = await request(url, {
+  // Use native fetch for broader compatibility (some sites block undici)
+  const res = await fetch(url, {
     headers: {
       "User-Agent": DEFAULT_HEADERS["User-Agent"],
       Accept: "text/html,application/xhtml+xml",
       "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
     },
   });
-  const html = await body.text();
-  if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
+  const html = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
   return cheerio.load(html);
 }
 
@@ -560,8 +561,8 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
 const KIRYUU_BASE = "https://v3.kiryuu.to";
 
 // Fetch HTML for Kiryuu POST (admin-ajax search)
-async function fetchHTMLPost(url: string, body: string): Promise<cheerio.CheerioAPI> {
-  const { statusCode, body: resBody } = await request(url, {
+async function fetchHTMLPost(url: string, postBody: string): Promise<cheerio.CheerioAPI> {
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "User-Agent": DEFAULT_HEADERS["User-Agent"],
@@ -569,10 +570,10 @@ async function fetchHTMLPost(url: string, body: string): Promise<cheerio.Cheerio
       "HX-Request": "true",
       Accept: "text/html,application/xhtml+xml",
     },
-    body,
+    body: postBody,
   });
-  const html = await resBody.text();
-  if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
+  const html = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
   return cheerio.load(html);
 }
 
