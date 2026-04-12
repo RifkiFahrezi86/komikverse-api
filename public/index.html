@@ -219,7 +219,7 @@
         <span class="pv-name">Kiryuu</span>
         <span class="pv-st chk" id="pR">Checking...</span>
       </div>
-      <div class="pv-info"><b>Method:</b> WP REST + Scraping<br><span id="pRms"></span></div>
+      <div class="pv-info"><b>Method:</b> WP REST API (Direct)<br><b>Source:</b> v3.kiryuu.to<br><span id="pRms"></span></div>
     </div>
   </div>
 
@@ -382,8 +382,7 @@ function es(ep, title) {
 /* Provider Health */
 var provs = [
   { key: 'shinigami', b: 'pS', m: 'pSms' },
-  { key: 'komiku', b: 'pK', m: 'pKms' },
-  { key: 'kiryuu', b: 'pR', m: 'pRms' }
+  { key: 'komiku', b: 'pK', m: 'pKms' }
 ];
 provs.forEach(function(p) {
   var t0 = Date.now();
@@ -402,6 +401,24 @@ provs.forEach(function(p) {
     $(p.b).className = 'pv-st err';
   });
 });
+/* Kiryuu: check WP REST API directly (Cloudflare blocks Vercel IPs) */
+(function() {
+  var t0 = Date.now();
+  fetch('https://v3.kiryuu.to/wp-json/wp/v2/manga?per_page=1&_fields=slug').then(function(r) {
+    var ms = Date.now() - t0;
+    if (r.ok) {
+      $('pR').textContent = 'Online';
+      $('pR').className = 'pv-st ok';
+      $('pRms').innerHTML = '<b>Latency:</b> ' + ms + 'ms';
+    } else {
+      $('pR').textContent = 'Error ' + r.status;
+      $('pR').className = 'pv-st err';
+    }
+  }).catch(function() {
+    $('pR').textContent = 'Offline';
+    $('pR').className = 'pv-st err';
+  });
+})();
 
 /* Analytics */
 fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(function(d) {
