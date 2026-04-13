@@ -572,31 +572,37 @@ const KOMIKAPK_IMG_CDN = "https://s1.cdn-guard.com/komikapk2-chapter/";
 const KOMIKAPK_DEFAULT_UPLOADER = "kmapk";
 
 // Dereference SvelteKit __data.json compressed array-reference format
+// In devalue format: object property values & array elements are indices into flat[].
+// Values at those indices are actual values (primitives returned as-is, objects/arrays recurse).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function derefSvelteData(raw: any): any {
   const nodes = raw?.nodes;
   if (!Array.isArray(nodes)) return null;
-  // Find first non-null data node
   const node = nodes.find((n: any) => n?.type === "data" && n.data);
   if (!node) return null;
   const flat = node.data;
+  const seen = new Set<number>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function deref(val: any): any {
-    if (typeof val === "number" && Number.isInteger(val) && val >= 0 && val < flat.length) {
-      const target = flat[val];
-      if (target === val) return target; // self-reference = literal number
-      return deref(target);
-    }
-    if (Array.isArray(val)) return val.map(deref);
-    if (val && typeof val === "object") {
+  function resolve(index: number): any {
+    if (index < 0 || index >= flat.length) return index;
+    if (seen.has(index)) return undefined; // cycle guard
+    seen.add(index);
+    const val = flat[index];
+    let result;
+    if (Array.isArray(val)) {
+      result = val.map((i: number) => resolve(i));
+    } else if (val && typeof val === "object") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const out: any = {};
-      for (const [k, v] of Object.entries(val)) out[k] = deref(v);
-      return out;
+      for (const [k, v] of Object.entries(val)) out[k] = resolve(v as number);
+      result = out;
+    } else {
+      result = val; // primitive: string, number, boolean, null
     }
-    return val;
+    seen.delete(index);
+    return result;
   }
-  return deref(flat[0]);
+  return resolve(0);
 }
 
 function decodeHtml(s: string): string {
@@ -926,16 +932,18 @@ async function fetchKomikuChaptersForMerge(comicTitle: string): Promise<any[]> {
 // Fetch chapters from KomikAPK for merge
 async function fetchKomikapkChaptersForMerge(comicTitle: string): Promise<any[]> {
   try {
-    const searchData = await komikapkFetchData(`/pencarian/__data.json?q=${encodeURIComponent(comicTitle)}`);
-    if (!searchData?.nodes) return [];
-
-    const results = searchData.nodes
-      .filter((n: any) => n?.type === "data" && n?.data)
-      .flatMap((n: any) => {
-        const d = derefSvelteData(n.data);
-        return Array.isArray(d) ? d : d?.results || d?.comics || [];
-      })
-      .filter((c: any) => c?.slug && c?.title);
+    // Search uses direct fetch (not komikapkFetchData) because of query params
+    const searchRes = await fetch(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(comicTitle)}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "application/json",
+      },
+    });
+    if (!searchRes.ok) return [];
+    const searchRaw = await searchRes.json();
+    const searchData = derefSvelteData(searchRaw);
+    const results = (searchData?.comics || []).filter((c: any) => c?.slug && c?.title);
+    if (!results.length) return [];
 
     const match = findBestTitleMatch(
       results.map((c: any) => ({ title: c.title, href: c.slug })),
@@ -943,30 +951,22 @@ async function fetchKomikapkChaptersForMerge(comicTitle: string): Promise<any[]>
     );
     if (!match) return [];
 
-    const detailData = await komikapkFetchData(`/komik/${match.href}/__data.json`);
-    if (!detailData?.nodes) return [];
+    const detailData = await komikapkFetchData(`/komik/${match.href}`);
+    const comic = detailData?.comicDetail;
+    if (!comic?.chaptersNonImage) return [];
 
-    let chapters: any[] = [];
-    for (const node of detailData.nodes) {
-      if (node?.type !== "data" || !node?.data) continue;
-      const d = derefSvelteData(node.data);
-      const chList = d?.chapters || d?.comic?.chapters;
-      if (!Array.isArray(chList)) continue;
-      for (const ch of chList) {
-        if (!ch?.slug) continue;
-        const numMatch = ch.slug.match(/[\d.]+/);
-        const num = numMatch ? parseFloat(numMatch[0]) : 0;
-        chapters.push({
-          title: ch.title || ch.name || `Chapter ${num}`,
-          href: `/chapter/${match.href}--${KOMIKAPK_DEFAULT_UPLOADER}--${ch.slug}`,
-          date: ch.created_at || ch.date || undefined,
-          number: num,
-          provider: "komikapk",
-        });
-      }
-      break;
+    const chapters: any[] = [];
+    for (const ch of comic.chaptersNonImage) {
+      if (!ch?.name) continue;
+      const num = parseFloat(ch.name);
+      chapters.push({
+        title: `Chapter ${ch.name}`,
+        href: `/chapter/${match.href}--${KOMIKAPK_DEFAULT_UPLOADER}--${ch.name}`,
+        date: ch.createdAt || undefined,
+        number: isNaN(num) ? 0 : num,
+        provider: "komikapk",
+      });
     }
-
     return chapters;
   } catch {
     return [];
