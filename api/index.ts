@@ -101,7 +101,6 @@ async function fetchHTML(url: string): Promise<cheerio.CheerioAPI> {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
       "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-      "Accept-Encoding": "gzip, deflate, br",
       "Cache-Control": "no-cache",
       "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24"',
       "Sec-Ch-Ua-Mobile": "?0",
@@ -444,26 +443,13 @@ function komikuParseListPage($: cheerio.CheerioAPI): any[] {
 const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
   terbaru: async (query) => {
     const page = parseInt(query.page) || 1;
-    const url = `${KOMIKU_API}/manga/?orderby=modified&page=${page}`;
-    const $ = await fetchHTML(url);
-    const comics = komikuParseListPage($);
-    if (comics.length === 0) {
-      // Return debug info to diagnose empty results
-      const html = $.html();
-      return apiResponse([], { debug_html_length: html.length, debug_has_bge: html.includes('class="bge"'), debug_title: $("title").text(), debug_url: url, debug_snippet: html.substring(0, 500) });
-    }
-    return apiResponse(comics);
+    const $ = await fetchHTML(`${KOMIKU_API}/manga/?orderby=modified&page=${page}`);
+    return apiResponse(komikuParseListPage($));
   },
 
   popular: async () => {
-    const url = `${KOMIKU_API}/other/hot/`;
-    const $ = await fetchHTML(url);
-    const comics = komikuParseListPage($);
-    if (comics.length === 0) {
-      const html = $.html();
-      return apiResponse([], { debug_html_length: html.length, debug_has_bge: html.includes('class="bge"'), debug_title: $("title").text(), debug_url: url, debug_snippet: html.substring(0, 500) });
-    }
-    return apiResponse(comics);
+    const $ = await fetchHTML(`${KOMIKU_API}/other/hot/`);
+    return apiResponse(komikuParseListPage($));
   },
 
   recommended: async () => {
