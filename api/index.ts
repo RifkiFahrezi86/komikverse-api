@@ -400,7 +400,7 @@ const shinigamiHandlers: Record<string, (query: any, slug?: string) => Promise<a
 
   health: async () => ({
     status: "ok",
-    providers: ["shinigami", "komiku", "kiryuu"],
+    providers: ["shinigami", "komiku", "komikapk"],
     timestamp: new Date().toISOString(),
   }),
 };
@@ -566,240 +566,162 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
   health: async () => ({ status: "ok", provider: "komiku", timestamp: new Date().toISOString() }),
 };
 
-// ─── Kiryuu Provider (v3.kiryuu.to) ───
-const KIRYUU_BASE = "https://v3.kiryuu.to";
+// ─── KomikAPK Provider (komikapk.app) ───
+const KOMIKAPK_BASE = "https://komikapk.app";
+const KOMIKAPK_IMG_CDN = "https://s1.cdn-guard.com/komikapk2-chapter/";
+const KOMIKAPK_DEFAULT_UPLOADER = "kmapk";
 
-// Fetch HTML for Kiryuu POST (admin-ajax search)
-async function fetchHTMLPost(url: string, postBody: string): Promise<cheerio.CheerioAPI> {
-  const { statusCode, body: resBody } = await request(url, {
-    method: "POST",
+// Dereference SvelteKit __data.json compressed array-reference format
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function derefSvelteData(raw: any): any {
+  const nodes = raw?.nodes;
+  if (!Array.isArray(nodes)) return null;
+  // Find first non-null data node
+  const node = nodes.find((n: any) => n?.type === "data" && n.data);
+  if (!node) return null;
+  const flat = node.data;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function deref(val: any): any {
+    if (typeof val === "number" && Number.isInteger(val) && val >= 0 && val < flat.length) {
+      const target = flat[val];
+      if (target === val) return target; // self-reference = literal number
+      return deref(target);
+    }
+    if (Array.isArray(val)) return val.map(deref);
+    if (val && typeof val === "object") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const out: any = {};
+      for (const [k, v] of Object.entries(val)) out[k] = deref(v);
+      return out;
+    }
+    return val;
+  }
+  return deref(flat[0]);
+}
+
+function decodeHtml(s: string): string {
+  return s.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#8211;/g, "–").replace(/&#8217;/g, "\u2019")
+    .replace(/&#8220;/g, "\u201C").replace(/&#8221;/g, "\u201D");
+}
+
+function komikapkTransformImageUrl(url: string): string {
+  if (url.startsWith("https://storage.com/")) {
+    return url.replace("https://storage.com/", KOMIKAPK_IMG_CDN);
+  }
+  return url;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function komikapkFetchData(path: string): Promise<any> {
+  const url = `${KOMIKAPK_BASE}${path}/__data.json`;
+  const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      "Content-Type": "application/x-www-form-urlencoded",
-      "HX-Request": "true",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-      "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24"',
-      "Sec-Ch-Ua-Mobile": "?0",
-      "Sec-Fetch-Dest": "empty",
-      "Sec-Fetch-Mode": "cors",
-      "Sec-Fetch-Site": "same-origin",
+      Accept: "application/json",
     },
-    body: postBody,
   });
-  const html = await resBody.text();
-  if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
-  return cheerio.load(html);
+  if (!res.ok) throw new Error(`KomikAPK error ${res.status} for ${path}`);
+  const raw = await res.json();
+  return derefSvelteData(raw);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function kiryuuParseListPage($: cheerio.CheerioAPI): any[] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const comics: any[] = [];
-  // New structure: #search-results > div children, each with h1 title, .wp-post-image, .numscore, .link-self
-  $("#search-results > div").each((_, el) => {
-    const $el = $(el);
-    const titleEl = $el.find("h1").first();
-    const title = titleEl.text().trim();
-    if (!title) return;
-    const link = $el.find("a[href*='/manga/']").first();
-    const href = link.attr("href") || "";
-    const slug = href.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
-    if (!slug || slug.includes("?")) return;
-    const img = $el.find(".wp-post-image").first();
-    const thumbnail = img.attr("src") || img.attr("data-src") || "";
-    const typeImg = $el.find("img[alt]").filter((_, e) => /^(manga|manhwa|manhua)$/i.test($(e).attr("alt") || "")).first();
-    const typeFromImg = typeImg.attr("alt") || "";
-    const type = typeFromImg ? typeFromImg.replace(/^./, (c) => c.toUpperCase()) : undefined;
-    const rating = $el.find(".numscore").first().text().trim();
-    // Status is in a <p> element near the status dot
-    const statusText = $el.find("p").filter((_, e) => /^(Ongoing|Completed|Hiatus)$/i.test($(e).text().trim())).first().text().trim();
-    // Chapter from .link-self
-    const chapterEl = $el.find("a.link-self p.inline-block, a[class*='link-self'] p.inline-block").first();
-    const chapter = chapterEl.text().trim();
-    comics.push({
-      title, thumbnail, image: thumbnail,
-      href: `/manga/${slug}`, type,
-      rating: rating || undefined,
-      chapter: chapter || undefined,
-      status: statusText || undefined,
-      _slug: slug,
-    });
-  });
-  return comics;
-}
-
-// Resolve/verify types for ALL Kiryuu comics using WP REST API batch query
-async function kiryuuResolveTypes(comics: any[]): Promise<any[]> {
-  const slugs = comics.map(c => c._slug).filter(Boolean);
-  if (slugs.length === 0) {
-    for (const c of comics) { delete c._slug; if (!c.type) c.type = "Manga"; }
-    return comics;
-  }
-  try {
-    // Batch query all slugs via WP REST API for authoritative type data
-    const batchSize = 30;
-    const typeMap: Record<string, string> = {};
-    for (let i = 0; i < slugs.length; i += batchSize) {
-      const batch = slugs.slice(i, i + batchSize);
-      const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${batch.join(",")}&_embed=wp:term&per_page=${batch.length}`;
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        for (const item of data) {
-          const s = item.slug;
-          const terms = item._embedded?.["wp:term"] || [];
-          for (const group of terms) {
-            for (const term of group) {
-              if (term.taxonomy === "type" && term.name && term.name !== "-") {
-                typeMap[s] = term.name;
-              }
-            }
-          }
-        }
-      }
-    }
-    // Apply authoritative WP API types to ALL comics (overwrite HTML-detected types)
-    for (const c of comics) {
-      if (c._slug && typeMap[c._slug]) {
-        c.type = typeMap[c._slug];
-      }
-    }
-  } catch { /* fallback to existing types */ }
-  // Clean up internal slug field and default missing types to "Manga"
-  for (const c of comics) {
-    delete c._slug;
-    if (!c.type) c.type = "Manga";
-  }
-  return comics;
-}
-
-// Helper to fetch manga list via WP REST API (bypasses Cloudflare HTML blocking)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function kiryuuFetchWpMangaList(params: string): Promise<{ comics: any[]; totalPages: number }> {
-  const url = `${KIRYUU_BASE}/wp-json/wp/v2/manga?${params}&_embed=wp:term,wp:featuredmedia`;
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`WP API error ${res.status}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data: any[] = await res.json();
-  const totalPages = parseInt(res.headers.get("x-wp-totalpages") || "1");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const comics = data.map((m: any) => {
-    const thumb = m._embedded?.["wp:featuredmedia"]?.[0]?.source_url || "";
-    let type = "Manga";
-    const terms = m._embedded?.["wp:term"] || [];
-    for (const group of terms) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const term of (group as any[])) {
-        if (term.taxonomy === "type" && term.name && term.name !== "-") type = term.name;
-      }
-    }
-    return {
-      title: m.title?.rendered || "",
-      thumbnail: thumb, image: thumb,
-      href: `/manga/${m.slug}`,
-      type,
-    };
-  });
-  return { comics, totalPages };
+function komikapkMapComic(c: any): any {
+  return {
+    title: decodeHtml(c.title || ""),
+    thumbnail: c.coverUrl || "",
+    image: c.coverUrl || "",
+    href: `/manga/${c.slug}`,
+    type: c.origin ? c.origin.charAt(0).toUpperCase() + c.origin.slice(1) : "Manga",
+    chapter: c.latestChapter?.name ? `Chapter ${c.latestChapter.name}` : undefined,
+    description: c.sinopsis ? decodeHtml(c.sinopsis).substring(0, 200) : undefined,
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
+const komikapkHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
   terbaru: async (query) => {
     const page = parseInt(query.page) || 1;
-    const { comics, totalPages } = await kiryuuFetchWpMangaList(`per_page=30&page=${page}&orderby=modified&order=desc`);
-    return apiResponse(comics, { current_page: page, length_page: totalPages, has_next: page < totalPages, has_prev: page > 1 });
+    const data = await komikapkFetchData(`/pustaka/semua/semua/terbaru/${page}`);
+    const comicCards = data?.comicCards || data;
+    const comics = (comicCards?.comics || []).map(komikapkMapComic);
+    const currentPage = comicCards?.page || page;
+    return apiResponse(comics, {
+      current_page: currentPage,
+      length_page: Math.max(currentPage + 1, 10),
+      has_next: comics.length >= 20,
+      has_prev: currentPage > 1,
+    });
   },
 
   popular: async () => {
-    const { comics } = await kiryuuFetchWpMangaList(`per_page=30&orderby=modified&order=desc`);
+    const data = await komikapkFetchData("/trending");
+    const comics = (data?.comics || []).slice(0, 30).map(komikapkMapComic);
     return apiResponse(comics);
   },
 
   recommended: async () => {
-    const { comics } = await kiryuuFetchWpMangaList(`per_page=30&orderby=date&order=desc`);
+    const data = await komikapkFetchData("/pustaka/semua/semua/terbaru/1");
+    const comicCards = data?.comicCards || data;
+    const comics = (comicCards?.comics || []).slice(0, 30).map(komikapkMapComic);
     return apiResponse(comics);
   },
 
   search: async (query) => {
     const keyword = query.keyword;
     if (!keyword) return apiError("Parameter 'keyword' diperlukan", 400);
-    const { comics } = await kiryuuFetchWpMangaList(`search=${encodeURIComponent(keyword)}&per_page=20&orderby=relevance`);
+    const res = await fetch(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(keyword)}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) throw new Error(`Search error ${res.status}`);
+    const raw = await res.json();
+    const data = derefSvelteData(raw);
+    const comics = (data?.comics || []).map(komikapkMapComic);
     return apiResponse(comics);
   },
 
   detail: async (_query, slug) => {
     if (!slug) return apiError("Slug required", 400);
-    // Fetch full manga data from WP REST API (bypasses Cloudflare HTML blocking)
-    const wpRes = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?slug=${encodeURIComponent(slug)}&_embed=wp:term,wp:featuredmedia`, {
-      headers: { Accept: "application/json" },
+    const data = await komikapkFetchData(`/komik/${slug}`);
+    const comic = data?.comicDetail;
+    if (!comic) return apiError("Comic not found", 404);
+    const title = decodeHtml(comic.title || "");
+    const thumbnail = comic.coverUrl || "";
+    const description = comic.sinopsis ? decodeHtml(comic.sinopsis) : "";
+    const type = comic.origin ? comic.origin.charAt(0).toUpperCase() + comic.origin.slice(1) : "Manga";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const genres = (comic.genres || []).map((g: any) => ({
+      title: g.name || g.title || "",
+      href: `/genre/${g.slug || ""}`,
+    }));
+    // Chapters: chaptersNonImage has all chapter metadata
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chapters = (comic.chaptersNonImage || []).map((ch: any) => {
+      const chName = ch.name || "";
+      const num = parseFloat(chName);
+      // Encode: slug--uploader--chapterName
+      const encoded = `${slug}--${KOMIKAPK_DEFAULT_UPLOADER}--${chName}`;
+      return {
+        title: `Chapter ${chName}`,
+        href: `/chapter/${encoded}`,
+        date: ch.createdAt || undefined,
+        number: isNaN(num) ? undefined : num,
+      };
     });
-    if (!wpRes.ok) throw new Error(`WP API error ${wpRes.status}`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const wpData: any[] = await wpRes.json();
-    if (!wpData.length) return apiError("Comic not found", 404);
-    const manga = wpData[0];
-    const title = (manga.title?.rendered || "").replace(/&#8211;/g, "–").replace(/&#8217;/g, "'").replace(/&amp;/g, "&");
-    const thumbnail = manga._embedded?.["wp:featuredmedia"]?.[0]?.source_url || "";
-    // Description from excerpt or content
-    const rawDesc = manga.excerpt?.rendered || manga.content?.rendered || "";
-    const description = cheerio.load(rawDesc).text().trim();
-    // Extract type, status, genres from embedded terms
-    let type = "Manga", status = "Unknown";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const genres: any[] = [];
-    const terms = manga._embedded?.["wp:term"] || [];
-    for (const group of terms) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const term of (group as any[])) {
-        if (term.taxonomy === "type" && term.name && term.name !== "-") type = term.name;
-        if (term.taxonomy === "status") status = term.name || "Unknown";
-        if (term.taxonomy === "genre") {
-          genres.push({ title: term.name, href: `/genre/${term.slug}` });
-        }
-      }
-    }
-    // Fetch chapters via admin-ajax using WP post ID (native fetch, may bypass Cloudflare)
-    const mangaId = manga.id;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let chapters: any[] = [];
-    try {
-      const chRes = await fetch(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaId}&page=1&action=chapter_list`, {
-        headers: { Accept: "text/html" },
-      });
-      if (chRes.ok) {
-        const chHtml = await chRes.text();
-        const ch$ = cheerio.load(chHtml);
-        ch$("div[data-chapter-number]").each((_, el) => {
-          const $ch = ch$(el);
-          const chNum = $ch.attr("data-chapter-number") || "";
-          const chLink = $ch.find("a").first();
-          const chHref = chLink.attr("href") || "";
-          const chTitle = $ch.find("span").first().text().trim() || `Chapter ${chNum}`;
-          const chDate = $ch.find("time").attr("datetime") || "";
-          if (!chHref) return;
-          const path = chHref.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
-          const parts = path.split("/");
-          if (parts.length < 2) return;
-          const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
-          chapters.push({
-            title: chTitle, href: `/chapter/${encoded}`,
-            date: chDate || undefined,
-            number: chNum ? parseFloat(chNum) : undefined,
-          });
-        });
-      }
-    } catch { /* chapters unavailable from admin-ajax */ }
+    // Sort chapters descending by number
+    chapters.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
     // Override status with AniList (authoritative)
+    let status = "Unknown";
     const aniStatus = await fetchAniListStatus(title);
     if (aniStatus !== "Unknown") status = aniStatus;
-    // Cross-provider chapter merge: fill missing early chapters from other providers
-    const mergedChapters = await mergeChaptersFromOtherProviders(chapters, title, "kiryuu");
+    // Cross-provider chapter merge
+    const mergedChapters = await mergeChaptersFromOtherProviders(chapters, title, "komikapk");
     return apiResponse({
       title, thumbnail, image: thumbnail, description, type, status, author: "", artist: "",
       genre: genres, rating: undefined, chapters: mergedChapters, released: "",
@@ -808,104 +730,64 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
 
   read: async (_query, slug) => {
     if (!slug) return apiError("Slug required", 400);
-    const sepIdx = slug.indexOf("--");
-    let url: string;
-    if (sepIdx !== -1) {
-      url = `${KIRYUU_BASE}/manga/${slug.substring(0, sepIdx)}/${slug.substring(sepIdx + 2)}/`;
+    // Slug format: comicSlug--uploaderSlug--chapterName
+    const parts = slug.split("--");
+    let comicSlug: string, uploaderSlug: string, chapterName: string;
+    if (parts.length >= 3) {
+      comicSlug = parts[0];
+      uploaderSlug = parts[1];
+      chapterName = parts.slice(2).join("--");
+    } else if (parts.length === 2) {
+      comicSlug = parts[0];
+      uploaderSlug = KOMIKAPK_DEFAULT_UPLOADER;
+      chapterName = parts[1];
     } else {
-      url = `${KIRYUU_BASE}/manga/${slug}/`;
+      return apiError("Invalid chapter slug format", 400);
     }
-    const $ = await fetchHTML(url);
-    const images: string[] = [];
-    // New structure: section[data-image-data] img or fallback #readerarea img
-    $("section[data-image-data] img, #readerarea img").each((_, el) => {
-      const src = $(el).attr("src") || $(el).attr("data-src") || "";
-      if (src && !src.includes("icon") && !src.includes("logo") && !src.includes("svg") && !src.includes("avatar")) {
-        images.push(src.trim());
-      }
-    });
-    // If still empty, try any img with cdnkuma domain
-    if (images.length === 0) {
-      $("img[src*='cdnkuma']").each((_, el) => {
-        const src = $(el).attr("src") || "";
-        if (src) images.push(src.trim());
-      });
+    const data = await komikapkFetchData(`/komik/${comicSlug}/${uploaderSlug}/${chapterName}`);
+    const chapter = data?.chapter;
+    if (!chapter) return apiError("Chapter not found", 404);
+    const title = decodeHtml(data?.comicDetail?.title || "") + ` Chapter ${chapter.name || chapterName}`;
+    const images = (chapter.images || []).map(komikapkTransformImageUrl);
+    // Find prev/next chapters from the comic detail's chapter list
+    const allChapters = data?.comicDetail?.chaptersNonImage || [];
+    const currentOrder = chapter.chapterOrder;
+    let prevChapterId: string | undefined;
+    let nextChapterId: string | undefined;
+    if (typeof currentOrder === "number") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prev = allChapters.find((c: any) => c.chapterOrder === currentOrder - 1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const next = allChapters.find((c: any) => c.chapterOrder === currentOrder + 1);
+      if (prev) prevChapterId = `${comicSlug}--${uploaderSlug}--${prev.name}`;
+      if (next) nextChapterId = `${comicSlug}--${uploaderSlug}--${next.name}`;
     }
-    const title = $("h1").first().text().trim() || $("title").text().replace(/ - Kiryuu.*/i, "").trim();
-    // Nav links: look for prev/next with rel or data attributes
-    const prevHref = $("a[rel='prev']").attr("href") || $("a[data-prev]").attr("href") ||
-      $("a:contains('Prev')").attr("href") || "";
-    const nextHref = $("a[rel='next']").attr("href") || $("a[data-next]").attr("href") ||
-      $("a:contains('Next')").attr("href") || "";
-    const encodeNav = (href: string): string | undefined => {
-      if (!href) return undefined;
-      const p = href.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
-      const ps = p.split("/");
-      return ps.length >= 2 ? `${ps[0]}--${ps.slice(1).join("/")}` : undefined;
-    };
-    return apiResponse([{ title, panel: images, prev_chapter_id: encodeNav(prevHref), next_chapter_id: encodeNav(nextHref) }]);
+    return apiResponse([{ title, panel: images, prev_chapter_id: prevChapterId, next_chapter_id: nextChapterId }]);
   },
 
   genre: async (query, slug) => {
     if (slug) {
       const page = parseInt(query.page) || 1;
-      // Use WP REST API to find genre term ID by slug, then fetch manga
-      try {
-        const genreRes = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/genre?slug=${encodeURIComponent(slug)}&_fields=id`, {
-          headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
-        });
-        if (!genreRes.ok) throw new Error("Genre not found");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const genreData: any[] = await genreRes.json();
-        if (!genreData.length) throw new Error("Genre not found");
-        const genreId = genreData[0].id;
-        const mangaRes = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/manga?genre=${genreId}&per_page=20&page=${page}&_embed=wp:term,wp:featuredmedia`, {
-          headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
-        });
-        if (!mangaRes.ok) throw new Error("Failed to fetch manga");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mangaData: any[] = await mangaRes.json();
-        const totalPages = parseInt(mangaRes.headers.get("x-wp-totalpages") || "1");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const comics = mangaData.map((m: any) => {
-          const thumb = m._embedded?.["wp:featuredmedia"]?.[0]?.source_url || "";
-          let type = "Manga";
-          const terms = m._embedded?.["wp:term"] || [];
-          for (const group of terms) {
-            for (const term of group) {
-              if (term.taxonomy === "type" && term.name && term.name !== "-") type = term.name;
-            }
-          }
-          return {
-            title: m.title?.rendered || "",
-            thumbnail: thumb, image: thumb,
-            href: `/manga/${m.slug}`,
-            type,
-          };
-        });
-        return apiResponse(comics, { current_page: page, length_page: totalPages, has_next: page < totalPages, has_prev: page > 1 });
-      } catch {
-        // Fallback to HTML scraping
-        const $ = await fetchHTML(`${KIRYUU_BASE}/genre/${slug}/page/${page}/`);
-        const comics = kiryuuParseListPage($);
-        if (comics.length > 0) return apiResponse(comics);
-        return apiResponse([]);
-      }
-    }
-    // Genre list — use WP REST API
-    try {
-      const res = await fetch(`${KIRYUU_BASE}/wp-json/wp/v2/genre?per_page=100&_fields=slug,name,count&orderby=count&order=desc`, {
-        headers: { "User-Agent": DEFAULT_HEADERS["User-Agent"] },
+      const type = query.type || "semua";
+      const data = await komikapkFetchData(`/pustaka/${type}/${slug}/terbaru/${page}`);
+      const comicCards = data?.comicCards || data;
+      const comics = (comicCards?.comics || []).map(komikapkMapComic);
+      const currentPage = comicCards?.page || page;
+      return apiResponse(comics, {
+        current_page: currentPage,
+        length_page: Math.max(currentPage + 1, 10),
+        has_next: comics.length >= 20,
+        has_prev: currentPage > 1,
       });
-      if (!res.ok) throw new Error("Failed");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any[] = await res.json();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const genres = data.filter((g: any) => g.count > 0).map((g: any) => ({
-        title: g.name, href: `/genre/${g.slug}`,
-      }));
-      if (genres.length > 0) return apiResponse(genres);
-    } catch { /* fallback */ }
+    }
+    // Genre list — fetch from pustaka page which includes genres
+    const data = await komikapkFetchData("/pustaka/semua/semua/terbaru/1");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const genres = (data?.genres || []).map((g: any) => ({
+      title: g.name || g.title || "",
+      href: `/genre/${g.slug || ""}`,
+    }));
+    if (genres.length > 0) return apiResponse(genres);
     const fallback = ["action","adventure","comedy","drama","fantasy","harem","horror","isekai",
       "martial-arts","mystery","psychological","romance","school-life","sci-fi","seinen",
       "shoujo","shounen","slice-of-life","sports","supernatural","thriller","tragedy"];
@@ -915,7 +797,7 @@ const kiryuuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
     })));
   },
 
-  health: async () => ({ status: "ok", provider: "kiryuu", timestamp: new Date().toISOString() }),
+  health: async () => ({ status: "ok", provider: "komikapk", timestamp: new Date().toISOString() }),
 };
 
 // ─── Cross-Provider Chapter Merge ───
@@ -947,7 +829,7 @@ async function mergeChaptersFromOtherProviders(
   }
 
   // Always try to merge from other providers to get the most complete chapter list
-  const otherProviders = ["shinigami", "komiku", "kiryuu"].filter(p => p !== currentProvider);
+  const otherProviders = ["shinigami", "komiku", "komikapk"].filter(p => p !== currentProvider);
   const existingNumbers = new Set(numbers);
 
   for (const fallbackProvider of otherProviders) {
@@ -958,8 +840,8 @@ async function mergeChaptersFromOtherProviders(
       for (const searchTitle of titlesToTry) {
         if (fallbackProvider === "komiku") {
           fallbackChapters = await fetchKomikuChaptersForMerge(searchTitle);
-        } else if (fallbackProvider === "kiryuu") {
-          fallbackChapters = await fetchKiryuuChaptersForMerge(searchTitle);
+        } else if (fallbackProvider === "komikapk") {
+          fallbackChapters = await fetchKomikapkChaptersForMerge(searchTitle);
         } else if (fallbackProvider === "shinigami") {
           fallbackChapters = await fetchShinigamiChaptersForMerge(searchTitle);
         }
@@ -1041,53 +923,54 @@ async function fetchKomikuChaptersForMerge(comicTitle: string): Promise<any[]> {
   return [...new Map(chapters.map(c => [c.href, c])).values()];
 }
 
-// Fetch chapters from Kiryuu for merge
-async function fetchKiryuuChaptersForMerge(comicTitle: string): Promise<any[]> {
-  const searchRes = await fetch(
-    `${KIRYUU_BASE}/wp-json/wp/v2/manga?search=${encodeURIComponent(comicTitle)}&per_page=5&_fields=slug,title`,
-    { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } }
-  );
-  if (!searchRes.ok) return [];
-  const searchData: any[] = await searchRes.json();
-  if (!searchData.length) return [];
-  const match = findBestTitleMatch(
-    searchData.map(d => ({ title: d.title?.rendered || d.title || "", href: d.slug })),
-    comicTitle
-  );
-  if (!match) return [];
-  
-  const detail$ = await fetchHTML(`${KIRYUU_BASE}/manga/${match.href}/`);
-  const mangaIdMatch = detail$.html().match(/manga_id=(\d+)/);
-  if (!mangaIdMatch) return [];
-  
-  const ch$ = await fetchHTML(`${KIRYUU_BASE}/wp-admin/admin-ajax.php?manga_id=${mangaIdMatch[1]}&page=1&action=chapter_list`).catch(() => null);
-  if (!ch$) return [];
-  
-  const chapters: any[] = [];
-  ch$("div[data-chapter-number]").each((_, el) => {
-    const $ch = ch$(el);
-    const chNum = $ch.attr("data-chapter-number") || "";
-    const chLink = $ch.find("a").first();
-    const chHref = chLink.attr("href") || "";
-    const chTitle = $ch.find("span").first().text().trim() || `Chapter ${chNum}`;
-    const chDate = $ch.find("time").attr("datetime") || "";
-    if (!chHref || !chNum) return;
-    const num = parseFloat(chNum);
-    if (isNaN(num)) return;
-    const path = chHref.replace(/https?:\/\/v[0-9]+\.kiryuu\.to\/manga\//, "").replace(/\/$/, "");
-    const parts = path.split("/");
-    if (parts.length < 2) return;
-    const encoded = `${parts[0]}--${parts.slice(1).join("/")}`;
-    chapters.push({
-      title: chTitle,
-      href: `/chapter/${encoded}`,
-      date: chDate || undefined,
-      number: num,
-      provider: "kiryuu",
-    });
-  });
-  
-  return chapters;
+// Fetch chapters from KomikAPK for merge
+async function fetchKomikapkChaptersForMerge(comicTitle: string): Promise<any[]> {
+  try {
+    const searchData = await komikapkFetchData(`/pencarian/__data.json?q=${encodeURIComponent(comicTitle)}`);
+    if (!searchData?.nodes) return [];
+
+    const results = searchData.nodes
+      .filter((n: any) => n?.type === "data" && n?.data)
+      .flatMap((n: any) => {
+        const d = derefSvelteData(n.data);
+        return Array.isArray(d) ? d : d?.results || d?.comics || [];
+      })
+      .filter((c: any) => c?.slug && c?.title);
+
+    const match = findBestTitleMatch(
+      results.map((c: any) => ({ title: c.title, href: c.slug })),
+      comicTitle
+    );
+    if (!match) return [];
+
+    const detailData = await komikapkFetchData(`/komik/${match.href}/__data.json`);
+    if (!detailData?.nodes) return [];
+
+    let chapters: any[] = [];
+    for (const node of detailData.nodes) {
+      if (node?.type !== "data" || !node?.data) continue;
+      const d = derefSvelteData(node.data);
+      const chList = d?.chapters || d?.comic?.chapters;
+      if (!Array.isArray(chList)) continue;
+      for (const ch of chList) {
+        if (!ch?.slug) continue;
+        const numMatch = ch.slug.match(/[\d.]+/);
+        const num = numMatch ? parseFloat(numMatch[0]) : 0;
+        chapters.push({
+          title: ch.title || ch.name || `Chapter ${num}`,
+          href: `/chapter/${match.href}--${KOMIKAPK_DEFAULT_UPLOADER}--${ch.slug}`,
+          date: ch.created_at || ch.date || undefined,
+          number: num,
+          provider: "komikapk",
+        });
+      }
+      break;
+    }
+
+    return chapters;
+  } catch {
+    return [];
+  }
 }
 
 // Fetch chapters from Shinigami for merge
@@ -1138,7 +1021,7 @@ function findBestTitleMatch(results: any[], targetTitle: string): any | null {
 const providers: Record<string, Record<string, (query: any, slug?: string) => Promise<any>>> = {
   shinigami: shinigamiHandlers,
   komiku: komikuHandlers,
-  kiryuu: kiryuuHandlers,
+  komikapk: komikapkHandlers,
 };
 
 // ─── Analytics Tracking (fire-and-forget) ───
