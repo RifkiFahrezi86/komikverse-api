@@ -70,6 +70,7 @@ function sanitizeSlug(slug: string): string {
 const API_BASE = "https://api.shngm.io/v1";
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 500;
+const UPSTREAM_CACHE_LIMIT = 200;
 
 const DEFAULT_HEADERS = {
   "User-Agent":
@@ -79,41 +80,106 @@ const DEFAULT_HEADERS = {
   Referer: "https://09.shinigami.asia/",
 };
 
+const KOMIKAPK_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept: "application/json",
+};
+
+const upstreamCache = new Map<string, { value: unknown; expiresAt: number }>();
+const upstreamInflight = new Map<string, Promise<unknown>>();
+
+function getUpstreamCacheTtl(url: string): number {
+  const normalized = url.toLowerCase();
+  if (normalized.includes("/genre") || normalized.includes("genre/list")) return 10 * 60 * 1000;
+  if (normalized.includes("/popular") || normalized.includes("/top") || normalized.includes("/trending") || normalized.includes("hot")) return 5 * 60 * 1000;
+  if (normalized.includes("recommended") || normalized.includes("is_recommended=true")) return 5 * 60 * 1000;
+  if (normalized.includes("/detail/") || normalized.includes("/manga/") || normalized.includes("/komik/")) return 10 * 60 * 1000;
+  if (normalized.includes("/chapter/") || normalized.includes("/read/") || normalized.includes("chapter/detail")) return 10 * 60 * 1000;
+  if (normalized.includes("search") || normalized.includes("?s=") || normalized.includes("q=")) return 2 * 60 * 1000;
+  return 2 * 60 * 1000;
+}
+
+function pruneUpstreamCache() {
+  const now = Date.now();
+  for (const [key, entry] of upstreamCache.entries()) {
+    if (entry.expiresAt <= now) upstreamCache.delete(key);
+  }
+  while (upstreamCache.size > UPSTREAM_CACHE_LIMIT) {
+    const oldestKey = upstreamCache.keys().next().value;
+    if (!oldestKey) break;
+    upstreamCache.delete(oldestKey);
+  }
+}
+
+async function getCachedUpstream<T>(key: string, ttl: number, loader: () => Promise<T>): Promise<T> {
+  const cached = upstreamCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value as T;
+  if (cached) upstreamCache.delete(key);
+
+  if (upstreamInflight.has(key)) return upstreamInflight.get(key) as Promise<T>;
+
+  const promise = loader()
+    .then((value) => {
+      upstreamCache.set(key, { value, expiresAt: Date.now() + ttl });
+      pruneUpstreamCache();
+      return value;
+    })
+    .finally(() => {
+      upstreamInflight.delete(key);
+    });
+
+  upstreamInflight.set(key, promise as Promise<unknown>);
+  return promise;
+}
+
+async function fetchKomikapkJson(url: string): Promise<any> {
+  return getCachedUpstream(`komikapk:${url}`, getUpstreamCacheTtl(url), async () => {
+    const res = await fetch(url, { headers: KOMIKAPK_HEADERS });
+    if (!res.ok) throw new Error(`KomikAPK error ${res.status} for ${url}`);
+    return res.json();
+  });
+}
+
 // ─── Fetch with retry ───
 async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<unknown> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const { statusCode, body } = await request(url, { headers: DEFAULT_HEADERS });
-      const text = await body.text();
-      if (statusCode === 200) return JSON.parse(text);
-      return JSON.parse(text);
-    } catch {
-      if (i < retries - 1) await new Promise((r) => setTimeout(r, RETRY_DELAY));
+  return getCachedUpstream(`shinigami:${url}`, getUpstreamCacheTtl(url), async () => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const { statusCode, body } = await request(url, { headers: DEFAULT_HEADERS });
+        const text = await body.text();
+        if (statusCode === 200) return JSON.parse(text);
+        return JSON.parse(text);
+      } catch {
+        if (i < retries - 1) await new Promise((r) => setTimeout(r, RETRY_DELAY));
+      }
     }
-  }
-  throw new Error(`Failed to fetch ${url} after ${retries} retries`);
+    throw new Error(`Failed to fetch ${url} after ${retries} retries`);
+  });
 }
 
 // ─── HTML Scraping Utility ───
 async function fetchHTML(url: string): Promise<cheerio.CheerioAPI> {
-  const { statusCode, body } = await request(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-      "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-      "Cache-Control": "no-cache",
-      "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24"',
-      "Sec-Ch-Ua-Mobile": "?0",
-      "Sec-Ch-Ua-Platform": '"Windows"',
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-      "Upgrade-Insecure-Requests": "1",
-    },
+  const html = await getCachedUpstream(`html:${url}`, getUpstreamCacheTtl(url), async () => {
+    const { statusCode, body } = await request(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+      },
+    });
+    const htmlText = await body.text();
+    if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
+    return htmlText;
   });
-  const html = await body.text();
-  if (statusCode !== 200) throw new Error(`HTTP ${statusCode} from ${url}`);
   return cheerio.load(html);
 }
 
@@ -622,14 +688,7 @@ function komikapkTransformImageUrl(url: string): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function komikapkFetchData(path: string): Promise<any> {
   const url = `${KOMIKAPK_BASE}${path}/__data.json`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      Accept: "application/json",
-    },
-  });
-  if (!res.ok) throw new Error(`KomikAPK error ${res.status} for ${path}`);
-  const raw = await res.json();
+  const raw = await fetchKomikapkJson(url);
   return derefSvelteData(raw);
 }
 
@@ -678,14 +737,7 @@ const komikapkHandlers: Record<string, (query: any, slug?: string) => Promise<an
   search: async (query) => {
     const keyword = query.keyword;
     if (!keyword) return apiError("Parameter 'keyword' diperlukan", 400);
-    const res = await fetch(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(keyword)}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        Accept: "application/json",
-      },
-    });
-    if (!res.ok) throw new Error(`Search error ${res.status}`);
-    const raw = await res.json();
+    const raw = await fetchKomikapkJson(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(keyword)}`);
     const data = derefSvelteData(raw);
     const comics = (data?.comics || []).map(komikapkMapComic);
     return apiResponse(comics);
@@ -932,14 +984,7 @@ async function fetchKomikuChaptersForMerge(comicTitle: string): Promise<any[]> {
 async function fetchKomikapkChaptersForMerge(comicTitle: string): Promise<any[]> {
   try {
     // Search uses direct fetch (not komikapkFetchData) because of query params
-    const searchRes = await fetch(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(comicTitle)}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        Accept: "application/json",
-      },
-    });
-    if (!searchRes.ok) return [];
-    const searchRaw = await searchRes.json();
+    const searchRaw = await fetchKomikapkJson(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(comicTitle)}`);
     const searchData = derefSvelteData(searchRaw);
     const results = (searchData?.comics || []).filter((c: any) => c?.slug && c?.title);
     if (!results.length) return [];
