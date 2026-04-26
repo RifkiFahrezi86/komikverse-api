@@ -465,7 +465,7 @@ const shinigamiHandlers: Record<string, (query: any, slug?: string) => Promise<a
 
   health: async () => ({
     status: "ok",
-    providers: ["shinigami", "komiku", "komikapk"],
+    providers: ["shinigami", "komiku"],
     timestamp: new Date().toISOString(),
   }),
 };
@@ -886,7 +886,7 @@ async function mergeChaptersFromOtherProviders(
   }
 
   // Always try to merge from other providers to get the most complete chapter list
-  const otherProviders = ["shinigami", "komiku", "komikapk"].filter(p => p !== currentProvider);
+  const otherProviders = ["shinigami", "komiku"].filter(p => p !== currentProvider);
   const existingNumbers = new Set(numbers);
 
   for (const fallbackProvider of otherProviders) {
@@ -1065,7 +1065,6 @@ function findBestTitleMatch(results: any[], targetTitle: string): any | null {
 const providers: Record<string, Record<string, (query: any, slug?: string) => Promise<any>>> = {
   shinigami: shinigamiHandlers,
   komiku: komikuHandlers,
-  komikapk: komikapkHandlers,
 };
 
 // ─── Analytics Tracking (fire-and-forget) ───
