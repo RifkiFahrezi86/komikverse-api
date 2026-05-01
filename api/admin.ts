@@ -61,6 +61,8 @@ async function loadAll() {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
+const BUILTIN_ALLOWED_ORIGINS = ["capacitor://localhost", "ionic://localhost"];
+const LOCALHOST_ORIGIN_RE = /^https?:\/\/localhost(?::\d+)?$/i;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
 
 interface JwtPayload {
@@ -71,11 +73,17 @@ interface JwtPayload {
 
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || "";
-  if (ALLOWED_ORIGINS.length > 0 && ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else if (ALLOWED_ORIGINS.length === 0) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-  }
+  const allowedOrigin = !origin
+    ? (ALLOWED_ORIGINS.length === 0 ? "*" : "")
+    : (
+      ALLOWED_ORIGINS.length === 0
+      || ALLOWED_ORIGINS.includes(origin)
+      || BUILTIN_ALLOWED_ORIGINS.includes(origin)
+      || LOCALHOST_ORIGIN_RE.test(origin)
+    )
+      ? origin
+      : "";
+  if (allowedOrigin) res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");

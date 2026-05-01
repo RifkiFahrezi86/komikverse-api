@@ -4,6 +4,13 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 let _query: any;
 let _bcrypt: any;
 let _jwt: any;
+let _authSchemaReady = false;
+
+const BUILTIN_ALLOWED_ORIGINS = [
+  "capacitor://localhost",
+  "ionic://localhost",
+];
+const LOCALHOST_ORIGIN_RE = /^https?:\/\/localhost(?::\d+)?$/i;
 
 async function loadAll() {
   if (!_query) {
@@ -33,13 +40,33 @@ async function loadAll() {
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
 
+async function ensureAuthSchema() {
+  if (_authSchemaReady) return;
+  await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free BOOLEAN DEFAULT false");
+  await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free_until TIMESTAMP WITH TIME ZONE");
+  await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0");
+  await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0");
+  await _query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_read_date DATE");
+  _authSchemaReady = true;
+}
+
+function resolveAllowedOrigin(origin: string): string {
+  if (!origin) return ALLOWED_ORIGINS.length === 0 ? "*" : "";
+  if (
+    ALLOWED_ORIGINS.length === 0
+    || ALLOWED_ORIGINS.includes(origin)
+    || BUILTIN_ALLOWED_ORIGINS.includes(origin)
+    || LOCALHOST_ORIGIN_RE.test(origin)
+  ) {
+    return origin;
+  }
+  return "";
+}
+
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || "";
-  if (ALLOWED_ORIGINS.length > 0 && ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else if (ALLOWED_ORIGINS.length === 0) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-  }
+  const allowedOrigin = resolveAllowedOrigin(origin);
+  if (allowedOrigin) res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -85,6 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "OPTIONS") return res.status(200).end();
 
     await loadAll();
+    await ensureAuthSchema();
 
     const ip = (typeof req.headers["x-forwarded-for"] === "string"
       ? req.headers["x-forwarded-for"].split(",")[0].trim()

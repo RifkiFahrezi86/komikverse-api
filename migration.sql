@@ -103,6 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_comic_views_total ON comic_views(view_count DESC)
 CREATE INDEX IF NOT EXISTS idx_comic_views_type ON comic_views(comic_type);
 
 -- User streak tracking columns for leaderboard
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_free BOOLEAN DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_read_date DATE;
