@@ -212,7 +212,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Email tidak valid" });
       if (password.length < 6) return res.status(400).json({ error: "Password minimal 6 karakter" });
 
-      const existing = await _query("SELECT id FROM users WHERE username = $1 OR email = $2", [username, email]);
+      const existing = await _query(
+        "SELECT id FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2)",
+        [username, email]
+      );
       if (existing.length > 0) return res.status(409).json({ error: "Username atau email sudah digunakan" });
 
       const passwordHash = await _bcrypt.hash(password, 10);
@@ -235,8 +238,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!login || !password) return res.status(400).json({ error: "Username/email dan password diperlukan" });
 
       const rows = await _query(
-        "SELECT id, username, email, password_hash, role, avatar_url, ad_free, created_at FROM users WHERE username = $1 OR email = $1",
-        [login.toLowerCase()]
+        "SELECT id, username, email, password_hash, role, avatar_url, ad_free, created_at FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)",
+        [login]
       );
       if (rows.length === 0) return res.status(401).json({ error: "Username atau password salah" });
 

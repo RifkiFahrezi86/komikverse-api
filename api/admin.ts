@@ -444,7 +444,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (username !== null) {
           if (username.length < 1) return res.status(400).json({ error: "Username tidak boleh kosong" });
           // Check uniqueness
-          const existing = await _query("SELECT id FROM users WHERE username = $1 AND id != $2", [username, id]);
+          const existing = await _query("SELECT id FROM users WHERE LOWER(username) = LOWER($1) AND id != $2", [username, id]);
           if (existing.length > 0) return res.status(400).json({ error: "Username sudah dipakai" });
           await _query("UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2", [username, id]);
           return res.status(200).json({ success: true });
@@ -509,7 +509,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!email) return res.status(400).json({ error: "Email diperlukan" });
         if (password.length < 6) return res.status(400).json({ error: "Password minimal 6 karakter" });
         // Check uniqueness
-        const existing = await _query("SELECT id FROM users WHERE username = $1 OR email = $2", [username, email]);
+        const existing = await _query(
+          "SELECT id FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2)",
+          [username, email]
+        );
         if (existing.length > 0) return res.status(400).json({ error: "Username atau email sudah dipakai" });
         const hash = await _bcrypt.hash(password, 10);
         const result = await _query(
