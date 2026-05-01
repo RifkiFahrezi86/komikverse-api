@@ -1,18 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-let _query: any;
-
-async function loadDb() {
-  if (!_query) {
-    const neonMod = await import("@neondatabase/serverless");
-    const neon = (neonMod as any).neon || (neonMod as any).default?.neon;
-    const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
-    if (!url) throw new Error("Database not configured");
-    const sql = neon(url);
-    _query = (text: string, params: unknown[] = []) => sql.query(text, params);
-  }
-}
-
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -25,33 +12,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Cache-Control", "public, max-age=300, immutable");
+
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  await loadDb();
-
-  try {
-    // Check if ads are globally enabled
-    const settingsRows = await _query("SELECT value FROM site_settings WHERE key = 'ads_enabled'");
-    const adsEnabled = settingsRows.length > 0 && settingsRows[0].value === "true";
-
-    if (!adsEnabled) {
-      return res.status(200).json({ ads: {} });
-    }
-
-    const rows = await _query(
-      "SELECT slot_name, ad_code FROM ad_placements WHERE is_active = true AND ad_code != ''"
-    );
-
-    const ads: Record<string, string> = {};
-    for (const row of rows) {
-      ads[row.slot_name] = row.ad_code;
-    }
-
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=120");
-    return res.status(200).json({ ads });
-  } catch (error) {
-    console.error("Ads error:", error);
-    return res.status(200).json({ ads: {} }); // Fail silently for ads
-  }
+  // Public ads now live in the frontend fallback registry.
+  return res.status(200).json({ ads: {} });
 }
