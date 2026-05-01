@@ -6,6 +6,7 @@ import * as cheerio from "cheerio";
 // ─── Security Config ───
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
 const API_SECRET = process.env.API_SECRET || "";
+const ENABLE_CONTENT_ANALYTICS = process.env.ENABLE_CONTENT_ANALYTICS === "1";
 
 // Rate limiting per IP (in-memory, resets on cold start)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -80,11 +81,6 @@ const DEFAULT_HEADERS = {
   Referer: "https://09.shinigami.asia/",
 };
 
-const KOMIKAPK_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  Accept: "application/json",
-};
-
 const upstreamCache = new Map<string, { value: unknown; expiresAt: number }>();
 const upstreamInflight = new Map<string, Promise<unknown>>();
 
@@ -130,14 +126,6 @@ async function getCachedUpstream<T>(key: string, ttl: number, loader: () => Prom
 
   upstreamInflight.set(key, promise as Promise<unknown>);
   return promise;
-}
-
-async function fetchKomikapkJson(url: string): Promise<any> {
-  return getCachedUpstream(`komikapk:${url}`, getUpstreamCacheTtl(url), async () => {
-    const res = await fetch(url, { headers: KOMIKAPK_HEADERS });
-    if (!res.ok) throw new Error(`KomikAPK error ${res.status} for ${url}`);
-    return res.json();
-  });
 }
 
 // ─── Fetch with retry ───
@@ -631,45 +619,6 @@ const komikuHandlers: Record<string, (query: any, slug?: string) => Promise<any>
   health: async () => ({ status: "ok", provider: "komiku", timestamp: new Date().toISOString() }),
 };
 
-// ─── KomikAPK Provider (komikapk.app) ───
-const KOMIKAPK_BASE = "https://komikapk.app";
-const KOMIKAPK_IMG_CDN = "https://s1.cdn-guard.com/komikapk2-chapter/";
-const KOMIKAPK_DEFAULT_UPLOADER = "kmapk";
-
-// Dereference SvelteKit __data.json compressed array-reference format
-// In devalue format: object property values & array elements are indices into flat[].
-// Values at those indices are actual values (primitives returned as-is, objects/arrays recurse).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function derefSvelteData(raw: any): any {
-  const nodes = raw?.nodes;
-  if (!Array.isArray(nodes)) return null;
-  const node = nodes.find((n: any) => n?.type === "data" && n.data);
-  if (!node) return null;
-  const flat = node.data;
-  const seen = new Set<number>();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function resolve(index: number): any {
-    if (index < 0 || index >= flat.length) return index;
-    if (seen.has(index)) return undefined; // cycle guard
-    seen.add(index);
-    const val = flat[index];
-    let result;
-    if (Array.isArray(val)) {
-      result = val.map((i: number) => resolve(i));
-    } else if (val && typeof val === "object") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const out: any = {};
-      for (const [k, v] of Object.entries(val)) out[k] = resolve(v as number);
-      result = out;
-    } else {
-      result = val; // primitive: string, number, boolean, null
-    }
-    seen.delete(index);
-    return result;
-  }
-  return resolve(0);
-}
-
 function decodeHtml(s: string): string {
   return s.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
@@ -677,186 +626,6 @@ function decodeHtml(s: string): string {
     .replace(/&quot;/g, '"').replace(/&#8211;/g, "–").replace(/&#8217;/g, "\u2019")
     .replace(/&#8220;/g, "\u201C").replace(/&#8221;/g, "\u201D");
 }
-
-function komikapkTransformImageUrl(url: string): string {
-  if (url.startsWith("https://storage.com/")) {
-    return url.replace("https://storage.com/", KOMIKAPK_IMG_CDN);
-  }
-  return url;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function komikapkFetchData(path: string): Promise<any> {
-  const url = `${KOMIKAPK_BASE}${path}/__data.json`;
-  const raw = await fetchKomikapkJson(url);
-  return derefSvelteData(raw);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function komikapkMapComic(c: any): any {
-  return {
-    title: decodeHtml(c.title || ""),
-    thumbnail: c.coverUrl || "",
-    image: c.coverUrl || "",
-    href: `/manga/${c.slug}`,
-    type: c.origin ? c.origin.charAt(0).toUpperCase() + c.origin.slice(1) : "Manga",
-    chapter: c.latestChapter?.name ? `Chapter ${c.latestChapter.name}` : undefined,
-    description: c.sinopsis ? decodeHtml(c.sinopsis).substring(0, 200) : undefined,
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const komikapkHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
-  terbaru: async (query) => {
-    const page = parseInt(query.page) || 1;
-    const data = await komikapkFetchData(`/pustaka/semua/semua/terbaru/${page}`);
-    const comicCards = data?.comicCards || data;
-    const comics = (comicCards?.comics || []).map(komikapkMapComic);
-    const currentPage = comicCards?.page || page;
-    return apiResponse(comics, {
-      current_page: currentPage,
-      length_page: Math.max(currentPage + 1, 10),
-      has_next: comics.length >= 20,
-      has_prev: currentPage > 1,
-    });
-  },
-
-  popular: async () => {
-    const data = await komikapkFetchData("/trending");
-    const comics = (data?.comics || []).slice(0, 30).map(komikapkMapComic);
-    return apiResponse(comics);
-  },
-
-  recommended: async () => {
-    const data = await komikapkFetchData("/pustaka/semua/semua/terbaru/1");
-    const comicCards = data?.comicCards || data;
-    const comics = (comicCards?.comics || []).slice(0, 30).map(komikapkMapComic);
-    return apiResponse(comics);
-  },
-
-  search: async (query) => {
-    const keyword = query.keyword;
-    if (!keyword) return apiError("Parameter 'keyword' diperlukan", 400);
-    const raw = await fetchKomikapkJson(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(keyword)}`);
-    const data = derefSvelteData(raw);
-    const comics = (data?.comics || []).map(komikapkMapComic);
-    return apiResponse(comics);
-  },
-
-  detail: async (_query, slug) => {
-    if (!slug) return apiError("Slug required", 400);
-    const data = await komikapkFetchData(`/komik/${slug}`);
-    const comic = data?.comicDetail;
-    if (!comic) return apiError("Comic not found", 404);
-    const title = decodeHtml(comic.title || "");
-    const thumbnail = comic.coverUrl || "";
-    const description = comic.sinopsis ? decodeHtml(comic.sinopsis) : "";
-    const type = comic.origin ? comic.origin.charAt(0).toUpperCase() + comic.origin.slice(1) : "Manga";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const genres = (comic.genres || []).map((g: any) => ({
-      title: g.name || g.title || "",
-      href: `/genre/${g.slug || ""}`,
-    }));
-    // Chapters: chaptersNonImage has all chapter metadata
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chapters = (comic.chaptersNonImage || []).map((ch: any) => {
-      const chName = ch.name || "";
-      const num = parseFloat(chName);
-      // Encode: slug--uploader--chapterName
-      const encoded = `${slug}--${KOMIKAPK_DEFAULT_UPLOADER}--${chName}`;
-      return {
-        title: `Chapter ${chName}`,
-        href: `/chapter/${encoded}`,
-        date: ch.createdAt || undefined,
-        number: isNaN(num) ? undefined : num,
-      };
-    });
-    // Sort chapters descending by number
-    chapters.sort((a: any, b: any) => (b.number || 0) - (a.number || 0));
-    // Override status with AniList (authoritative)
-    let status = "Unknown";
-    const aniStatus = await fetchAniListStatus(title);
-    if (aniStatus !== "Unknown") status = aniStatus;
-    // Cross-provider chapter merge
-    const mergedChapters = await mergeChaptersFromOtherProviders(chapters, title, "komikapk");
-    return apiResponse({
-      title, thumbnail, image: thumbnail, description, type, status, author: "", artist: "",
-      genre: genres, rating: undefined, chapters: mergedChapters, released: "",
-    });
-  },
-
-  read: async (_query, slug) => {
-    if (!slug) return apiError("Slug required", 400);
-    // Slug format: comicSlug--uploaderSlug--chapterName
-    const parts = slug.split("--");
-    let comicSlug: string, uploaderSlug: string, chapterName: string;
-    if (parts.length >= 3) {
-      comicSlug = parts[0];
-      uploaderSlug = parts[1];
-      chapterName = parts.slice(2).join("--");
-    } else if (parts.length === 2) {
-      comicSlug = parts[0];
-      uploaderSlug = KOMIKAPK_DEFAULT_UPLOADER;
-      chapterName = parts[1];
-    } else {
-      return apiError("Invalid chapter slug format", 400);
-    }
-    const data = await komikapkFetchData(`/komik/${comicSlug}/${uploaderSlug}/${chapterName}`);
-    const chapter = data?.chapter;
-    if (!chapter) return apiError("Chapter not found", 404);
-    const title = decodeHtml(data?.comicDetail?.title || "") + ` Chapter ${chapter.name || chapterName}`;
-    const images = (chapter.images || []).map(komikapkTransformImageUrl);
-    // Find prev/next chapters from the comic detail's chapter list
-    const allChapters = data?.comicDetail?.chaptersNonImage || [];
-    const currentOrder = chapter.chapterOrder;
-    let prevChapterId: string | undefined;
-    let nextChapterId: string | undefined;
-    if (typeof currentOrder === "number") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const prev = allChapters.find((c: any) => c.chapterOrder === currentOrder - 1);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const next = allChapters.find((c: any) => c.chapterOrder === currentOrder + 1);
-      if (prev) prevChapterId = `${comicSlug}--${uploaderSlug}--${prev.name}`;
-      if (next) nextChapterId = `${comicSlug}--${uploaderSlug}--${next.name}`;
-    }
-    return apiResponse([{ title, panel: images, prev_chapter_id: prevChapterId, next_chapter_id: nextChapterId }]);
-  },
-
-  genre: async (query, slug) => {
-    if (slug) {
-      const page = parseInt(query.page) || 1;
-      const type = query.type || "semua";
-      const data = await komikapkFetchData(`/pustaka/${type}/${slug}/terbaru/${page}`);
-      const comicCards = data?.comicCards || data;
-      const comics = (comicCards?.comics || []).map(komikapkMapComic);
-      const currentPage = comicCards?.page || page;
-      return apiResponse(comics, {
-        current_page: currentPage,
-        length_page: Math.max(currentPage + 1, 10),
-        has_next: comics.length >= 20,
-        has_prev: currentPage > 1,
-      });
-    }
-    // Genre list — fetch from pustaka page which includes genres
-    const data = await komikapkFetchData("/pustaka/semua/semua/terbaru/1");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const genres = (data?.genres || []).map((g: any) => ({
-      title: g.name || g.title || "",
-      href: `/genre/${g.slug || ""}`,
-    }));
-    if (genres.length > 0) return apiResponse(genres);
-    const fallback = ["action","adventure","comedy","drama","fantasy","harem","horror","isekai",
-      "martial-arts","mystery","psychological","romance","school-life","sci-fi","seinen",
-      "shoujo","shounen","slice-of-life","sports","supernatural","thriller","tragedy"];
-    return apiResponse(fallback.map(g => ({
-      title: g.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
-      href: `/genre/${g}`,
-    })));
-  },
-
-  health: async () => ({ status: "ok", provider: "komikapk", timestamp: new Date().toISOString() }),
-};
-
 // ─── Cross-Provider Chapter Merge ───
 // If a provider has incomplete chapters (e.g., starts at ch.100), try other providers to fill gaps
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -897,8 +666,6 @@ async function mergeChaptersFromOtherProviders(
       for (const searchTitle of titlesToTry) {
         if (fallbackProvider === "komiku") {
           fallbackChapters = await fetchKomikuChaptersForMerge(searchTitle);
-        } else if (fallbackProvider === "komikapk") {
-          fallbackChapters = await fetchKomikapkChaptersForMerge(searchTitle);
         } else if (fallbackProvider === "shinigami") {
           fallbackChapters = await fetchShinigamiChaptersForMerge(searchTitle);
         }
@@ -980,43 +747,6 @@ async function fetchKomikuChaptersForMerge(comicTitle: string): Promise<any[]> {
   return [...new Map(chapters.map(c => [c.href, c])).values()];
 }
 
-// Fetch chapters from KomikAPK for merge
-async function fetchKomikapkChaptersForMerge(comicTitle: string): Promise<any[]> {
-  try {
-    // Search uses direct fetch (not komikapkFetchData) because of query params
-    const searchRaw = await fetchKomikapkJson(`${KOMIKAPK_BASE}/pencarian/__data.json?q=${encodeURIComponent(comicTitle)}`);
-    const searchData = derefSvelteData(searchRaw);
-    const results = (searchData?.comics || []).filter((c: any) => c?.slug && c?.title);
-    if (!results.length) return [];
-
-    const match = findBestTitleMatch(
-      results.map((c: any) => ({ title: c.title, href: c.slug })),
-      comicTitle
-    );
-    if (!match) return [];
-
-    const detailData = await komikapkFetchData(`/komik/${match.href}`);
-    const comic = detailData?.comicDetail;
-    if (!comic?.chaptersNonImage) return [];
-
-    const chapters: any[] = [];
-    for (const ch of comic.chaptersNonImage) {
-      if (!ch?.name) continue;
-      const num = parseFloat(ch.name);
-      chapters.push({
-        title: `Chapter ${ch.name}`,
-        href: `/chapter/${match.href}--${KOMIKAPK_DEFAULT_UPLOADER}--${ch.name}`,
-        date: ch.createdAt || undefined,
-        number: isNaN(num) ? 0 : num,
-        provider: "komikapk",
-      });
-    }
-    return chapters;
-  } catch {
-    return [];
-  }
-}
-
 // Fetch chapters from Shinigami for merge
 async function fetchShinigamiChaptersForMerge(comicTitle: string): Promise<any[]> {
   const result: any = await getMangaList({ page: 1, page_size: 10, sort: "latest", sort_order: "desc", q: comicTitle });
@@ -1072,6 +802,7 @@ let _analyticsQuery: any;
 let _analyticsMigrated = false;
 
 async function getAnalyticsDb() {
+  if (!ENABLE_CONTENT_ANALYTICS) return null;
   if (!_analyticsQuery) {
     const url = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL_UNPOOLED || process.env.POSTGRES_PRISMA_URL || "";
     if (!url) return null;
@@ -1107,6 +838,7 @@ function hashIP(ip: string): string {
 }
 
 function trackRequest(req: VercelRequest, endpoint: string, provider: string) {
+  if (!ENABLE_CONTENT_ANALYTICS) return;
   // Fire-and-forget: don't await, don't block response
   getAnalyticsDb().then(q => {
     if (!q) return;

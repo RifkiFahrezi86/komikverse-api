@@ -214,13 +214,6 @@
       </div>
       <div class="pv-info"><b>Method:</b> HTML Scraping<br><b>Parser:</b> Cheerio<br><span id="pKms"></span></div>
     </div>
-    <div class="pv s3">
-      <div class="pv-top">
-        <span class="pv-name">KomikAPK</span>
-        <span class="pv-st chk" id="pR">Checking...</span>
-      </div>
-      <div class="pv-info"><b>Method:</b> SvelteKit __data.json<br><b>Source:</b> komikapk.app<br><span id="pRms"></span></div>
-    </div>
   </div>
 
   <!-- Traffic Chart -->
@@ -401,25 +394,6 @@ provs.forEach(function(p) {
     $(p.b).className = 'pv-st err';
   });
 });
-/* KomikAPK: check via backend */
-(function() {
-  var t0 = Date.now();
-  fetch(API + '/popular?provider=komikapk').then(function(r) {
-    var ms = Date.now() - t0;
-    if (r.ok) {
-      $('pR').textContent = 'Online';
-      $('pR').className = 'pv-st ok';
-      $('pRms').innerHTML = '<b>Latency:</b> ' + ms + 'ms';
-    } else {
-      $('pR').textContent = 'Error ' + r.status;
-      $('pR').className = 'pv-st err';
-    }
-  }).catch(function() {
-    $('pR').textContent = 'Offline';
-    $('pR').className = 'pv-st err';
-  });
-})();
-
 /* Analytics */
 fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(function(d) {
   sv('vVisit', fn(d.unique_visitors || 0));
