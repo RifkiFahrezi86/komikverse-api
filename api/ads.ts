@@ -8,6 +8,7 @@ let publicAdsCache:
         ads_enabled: boolean;
         ads: Record<string, string>;
         disabled_slots: string[];
+        managed_slots: string[];
         generated_at: string;
       };
     }
@@ -17,6 +18,7 @@ let publicAdsInflight:
       ads_enabled: boolean;
       ads: Record<string, string>;
       disabled_slots: string[];
+      managed_slots: string[];
       generated_at: string;
     }>
   | null = null;
@@ -24,7 +26,7 @@ let publicAdsInflight:
 const BUILTIN_ALLOWED_ORIGINS = ["capacitor://localhost", "ionic://localhost"];
 const LOCALHOST_ORIGIN_RE = /^https?:\/\/localhost(?::\d+)?$/i;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
-const PUBLIC_ADS_TTL = 5 * 60 * 1000;
+const PUBLIC_ADS_TTL = 60 * 1000;
 
 async function loadQuery() {
   if (_query) return;
@@ -70,10 +72,13 @@ async function buildPublicAdsPayload() {
   const adsEnabled = settingsRows[0]?.value !== "false";
   const ads: Record<string, string> = {};
   const disabledSlots: string[] = [];
+  const managedSlots: string[] = [];
   for (const row of adRows) {
     const slotName = String(row.slot_name || "").trim();
     const adCode = String(row.ad_code || "");
     if (!slotName) continue;
+
+    managedSlots.push(slotName);
 
     if (row.is_active === false) {
       disabledSlots.push(slotName);
@@ -88,6 +93,7 @@ async function buildPublicAdsPayload() {
     ads_enabled: adsEnabled,
     ads,
     disabled_slots: disabledSlots,
+    managed_slots: managedSlots,
     generated_at: new Date().toISOString(),
   };
 }
@@ -125,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await loadQuery();
     const payload = await getPublicAdsPayload();
 
-    res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=86400");
+    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=3600");
     return res.status(200).json(payload);
   } catch (error) {
     console.error("Public ads error:", error);
