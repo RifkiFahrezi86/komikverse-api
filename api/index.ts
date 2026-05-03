@@ -793,10 +793,217 @@ function findBestTitleMatch(results: any[], targetTitle: string): any | null {
 }
 
 // ─── Provider Routing ───
+// ─── Komikindo Provider (komikindo.ch) ───
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchHTMLKomikindo(url: string): Promise<cheerio.CheerioAPI> {
+  try {
+    const res = await request(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "id-ID,id;q=0.9",
+      },
+    } as any);
+    const body = await res.body.text();
+    return cheerio.load(body);
+  } catch (error) {
+    console.error("Komikindo fetch error:", error);
+    throw new Error("Gagal mengambil data dari Komikindo");
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function komikindoParseListPage($: cheerio.CheerioAPI): any[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const comics: any[] = [];
+  $(".komik-item, .series-item, [class*='comic'], [class*='manga']").each((_, el) => {
+    const $el = $(el);
+    // Get title
+    const titleEl = $el.find("h3, h4, .title, [class*='title']").first();
+    const title = titleEl.text().trim() || $el.find("a").attr("title") || "";
+    if (!title) return;
+
+    // Get link and extract slug
+    const link = $el.find("a[href*='/komik/']").first().attr("href") || "";
+    const slug = link.replace(/^.*\/komik\//, "").replace(/\/$/, "");
+    if (!link || !slug) return;
+
+    // Get thumbnail
+    const img = $el.find("img").first();
+    const thumbnail = img.attr("src") || img.attr("data-src") || "";
+
+    // Get type and genre from metadata
+    const metaText = $el.find(".meta, .info, [class*='info']").text() || "";
+    const typeMatch = metaText.match(/(Manga|Manhwa|Manhua|Webtoon)/i);
+    const type = typeMatch ? typeMatch[1] : "Manga";
+
+    comics.push({
+      title,
+      thumbnail: thumbnail || "",
+      image: thumbnail || "",
+      href: `/komik/${slug}`,
+      type,
+    });
+  });
+  return comics.length > 0 ? comics : [];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function komikindoFetchComicDetail($: cheerio.CheerioAPI): Promise<any> {
+  // Extract title
+  const title = $("h1[class*='title'], .comic-title, .series-title").first().text().trim() || $("title").text().split("|")[0].trim();
+
+  // Extract description
+  const description = $("[class*='deskripsi'], [class*='description'], .sinopsis, p[class*='desc']").first().text().trim() || "";
+
+  // Extract thumbnail
+  const thumbnail = $("img[class*='cover'], .comic-cover").attr("src") || $("img").first().attr("src") || "";
+
+  // Extract genre/type
+  const metaText = $(".meta-info, [class*='info']").text() || "";
+  const typeMatch = metaText.match(/(Manga|Manhwa|Manhua|Webtoon)/i);
+  const type = typeMatch ? typeMatch[1] : "Manga";
+
+  // Extract status
+  const statusText = metaText.match(/(Ongoing|Completed|On Hiatus|Dropped)/i);
+  const status = statusText ? statusText[1] : "Unknown";
+
+  // Parse chapters
+  const chapters: any[] = [];
+  $("a[href*='-chapter-'], [class*='chapter'] a").each((_, el) => {
+    const $el = $(el);
+    const chTitle = $el.text().trim();
+    const href = $el.attr("href") || "";
+    if (!href || !chTitle) return;
+
+    // Extract chapter number from title
+    const numMatch = chTitle.match(/chapter\s*(\d+(?:\.\d+)?)/i) || chTitle.match(/ch\s*(\d+(?:\.\d+)?)/i);
+    const number = numMatch ? parseFloat(numMatch[1]) : chapters.length + 1;
+
+    chapters.push({
+      title: chTitle,
+      href,
+      number,
+    });
+  });
+
+  return {
+    title,
+    description,
+    thumbnail: thumbnail || "",
+    image: thumbnail || "",
+    type,
+    status,
+    chapters: chapters.reverse(), // newest first
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function komikindoFetchChapterImages($: cheerio.CheerioAPI): Promise<string[]> {
+  const images: string[] = [];
+
+  // Try multiple selectors for image containers
+  $("img[data-src], img[src*='komik'], [class*='image'] img, .reader img, [class*='chapter'] img").each((_, el) => {
+    const src = $(el).attr("data-src") || $(el).attr("src") || "";
+    if (src && !src.includes("logo") && !src.includes("banner") && !src.includes("ads")) {
+      images.push(src);
+    }
+  });
+
+  return images.filter((img, idx, arr) => arr.indexOf(img) === idx); // dedupe
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
+  terbaru: async (query) => {
+    try {
+      const page = parseInt(query.page) || 1;
+      const url = `https://komikindo.ch/komik-terbaru/?page=${page}`;
+      const $ = await fetchHTMLKomikindo(url);
+      const comics = komikindoParseListPage($);
+      return apiResponse(comics);
+    } catch (error) {
+      return apiError("Gagal fetch komik terbaru", 500);
+    }
+  },
+
+  popular: async (query) => {
+    try {
+      const page = parseInt(query.page) || 1;
+      const url = `https://komikindo.ch/komik-populer/?page=${page}`;
+      const $ = await fetchHTMLKomikindo(url);
+      const comics = komikindoParseListPage($);
+      return apiResponse(comics);
+    } catch (error) {
+      return apiError("Gagal fetch komik populer", 500);
+    }
+  },
+
+  search: async (query) => {
+    try {
+      const keyword = query.keyword || query.q || "";
+      if (!keyword) return apiError("Keyword required", 400);
+      const url = `https://komikindo.ch/?s=${encodeURIComponent(keyword)}`;
+      const $ = await fetchHTMLKomikindo(url);
+      const comics = komikindoParseListPage($);
+      return apiResponse(comics);
+    } catch (error) {
+      return apiError("Gagal cari komik", 500);
+    }
+  },
+
+  detail: async (_query, slug) => {
+    try {
+      if (!slug) return apiError("Slug required", 400);
+      const url = `https://komikindo.ch/komik/${slug}/`;
+      const $ = await fetchHTMLKomikindo(url);
+      const detail = await komikindoFetchComicDetail($);
+      return apiResponse(detail);
+    } catch (error) {
+      return apiError("Komik tidak ditemukan", 404);
+    }
+  },
+
+  read: async (_query, slug) => {
+    try {
+      if (!slug) return apiError("Slug required", 400);
+      const url = `https://komikindo.ch/${slug}/`;
+      const $ = await fetchHTMLKomikindo(url);
+      const images = await komikindoFetchChapterImages($);
+      return apiResponse([{ images, chapter: slug }]);
+    } catch (error) {
+      return apiError("Chapter tidak ditemukan", 404);
+    }
+  },
+
+  genre: async (query, slug) => {
+    try {
+      if (slug) {
+        const page = parseInt(query.page) || 1;
+        const url = `https://komikindo.ch/genre/${slug}/?page=${page}`;
+        const $ = await fetchHTMLKomikindo(url);
+        return apiResponse(komikindoParseListPage($));
+      }
+      // Return hardcoded genre list
+      const genres = ["action", "adventure", "comedy", "drama", "ecchi", "fantasy", "horror", "isekai", "romance", "school", "shounen"];
+      return apiResponse(genres.map(g => ({
+        title: g.charAt(0).toUpperCase() + g.slice(1),
+        href: `/genre/${g}`,
+      })));
+    } catch (error) {
+      return apiError("Gagal fetch genre", 500);
+    }
+  },
+
+  health: async () => ({ status: "ok", provider: "komikindo", timestamp: new Date().toISOString() }),
+};
+
+// ─── Provider Routing ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const providers: Record<string, Record<string, (query: any, slug?: string) => Promise<any>>> = {
   shinigami: shinigamiHandlers,
   komiku: komikuHandlers,
+  komikindo: komikindoHandlers,
 };
 
 // ─── Analytics Tracking (fire-and-forget) ───
