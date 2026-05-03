@@ -4,6 +4,9 @@ let _query: any;
 let _jwt: any;
 let _bcrypt: any;
 let _seedColsMigrated = false;
+let _analyticsTableEnsured = false;
+let _analyticsCache: { value: any; expiresAt: number } | null = null;
+const ANALYTICS_CACHE_TTL = 60_000;
 
 async function loadAll() {
   if (!_query) {
@@ -258,24 +261,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ─── Clear Old Analytics (public, used by dashboard) ───
   if (earlyResource === "clear-monthly" && req.method === "POST") {
     await _query("DELETE FROM api_analytics WHERE created_at < date_trunc('month', CURRENT_DATE)");
+    _analyticsCache = null;
     return res.status(200).json({ success: true, message: "Data bulan lalu berhasil dihapus" });
   }
 
   if (earlyResource === "analytics" && req.method === "GET") {
-    try {
-      await _query(`
-        CREATE TABLE IF NOT EXISTS api_analytics (
-          id SERIAL PRIMARY KEY,
-          ip_hash VARCHAR(64) NOT NULL,
-          endpoint VARCHAR(255) NOT NULL,
-          provider VARCHAR(50),
-          user_agent TEXT,
-          referer TEXT,
-          country VARCHAR(10),
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-      `);
-    } catch { /* ignore */ }
+    const now = Date.now();
+    if (_analyticsCache && _analyticsCache.expiresAt > now) {
+      res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+      return res.status(200).json(_analyticsCache.value);
+    }
+
+    if (!_analyticsTableEnsured) {
+      try {
+        await _query(`
+          CREATE TABLE IF NOT EXISTS api_analytics (
+            id SERIAL PRIMARY KEY,
+            ip_hash VARCHAR(64) NOT NULL,
+            endpoint VARCHAR(255) NOT NULL,
+            provider VARCHAR(50),
+            user_agent TEXT,
+            referer TEXT,
+            country VARCHAR(10),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          )
+        `);
+      } catch { /* ignore */ }
+      _analyticsTableEnsured = true;
+    }
 
     const [
       totalRequests,
@@ -343,7 +356,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               GROUP BY DATE(created_at) ORDER BY date DESC`),
     ]);
 
-    return res.status(200).json({
+    const payload = {
       total_requests: parseInt(totalRequests[0]?.count || "0"),
       unique_visitors: parseInt(uniqueVisitors[0]?.count || "0"),
       today_requests: parseInt(todayRequests[0]?.count || "0"),
@@ -364,7 +377,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         visitors: parseInt(monthVisitors[0]?.count || "0"),
         daily_activity: monthDailyActivity,
       },
-    });
+    };
+
+    _analyticsCache = {
+      value: payload,
+      expiresAt: now + ANALYTICS_CACHE_TTL,
+    };
+    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    return res.status(200).json(payload);
   }
 
   const admin = await verifyAdmin(req);
