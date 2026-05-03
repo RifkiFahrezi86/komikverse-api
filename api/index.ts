@@ -987,30 +987,44 @@ async function fetchHTMLKomikindo(url: string): Promise<cheerio.CheerioAPI> {
   return fetchPromise;
 }
 
+function getKomikindoPagedUrl(basePath: string, page: number, query?: URLSearchParams): string {
+  const normalizedPage = Number.isFinite(page) && page > 1 ? page : 1;
+  const normalizedBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
+  const path = normalizedPage > 1 ? `${normalizedBase}page/${normalizedPage}/` : normalizedBase;
+  const qs = query && query.toString() ? `?${query.toString()}` : "";
+  return `https://komikindo.ch${path}${qs}`;
+}
+
+function getKomikindoType(typeFlagClass: string, fallbackText = ""): string | undefined {
+  const combined = `${typeFlagClass} ${fallbackText}`;
+  const match = combined.match(/\b(Manga|Manhwa|Manhua|Webtoon)\b/i);
+  return match ? match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase() : undefined;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function komikindoParseListPage($: cheerio.CheerioAPI): any[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const comics: any[] = [];
-  $(".komik-item, .series-item, [class*='comic'], [class*='manga']").each((_, el) => {
-    const $el = $(el);
-    // Get title
-    const titleEl = $el.find("h3, h4, .title, [class*='title']").first();
-    const title = titleEl.text().trim() || $el.find("a").attr("title") || "";
-    if (!title) return;
+  const seen = new Set<string>();
 
-    // Get link and extract slug
-    const link = $el.find("a[href*='/komik/']").first().attr("href") || "";
+  $("#content .listupd .animepost, .postbody .listupd .animepost, .widget-body .listupd .animepost").each((_, el) => {
+    const $card = $(el).find(".animposx").first().length ? $(el).find(".animposx").first() : $(el);
+    const headingLink = $card.find(".tt a[href*='/komik/'], h3 a[href*='/komik/']").first();
+    const titleLink = headingLink.length
+      ? headingLink
+      : $card.find("> a[href*='/komik/'], a[href*='/komik/']").first();
+    const link = titleLink.attr("href") || $card.find("a[href*='/komik/']").first().attr("href") || "";
     const slug = link.replace(/^.*\/komik\//, "").replace(/\/$/, "");
-    if (!link || !slug) return;
+    const title = titleLink.text().trim() || titleLink.attr("title")?.replace(/^Komik\s+/i, "").trim() || "";
+    if (!slug || !title || seen.has(slug)) return;
 
-    // Get thumbnail
-    const img = $el.find("img").first();
-    const thumbnail = img.attr("src") || img.attr("data-src") || "";
-
-    // Get type and genre from metadata
-    const metaText = $el.find(".meta, .info, [class*='info']").text() || "";
-    const typeMatch = metaText.match(/(Manga|Manhwa|Manhua|Webtoon)/i);
-    const type = typeMatch ? typeMatch[1] : "Manga";
+    const img = $card.find(".limit img, img[itemprop='image'], img").first();
+    const thumbnail = img.attr("src") || img.attr("data-src") || img.attr("data-lazy-src") || "";
+    const typeFlag = $card.find(".typeflag").first();
+    const type = getKomikindoType(typeFlag.attr("class") || "", typeFlag.text().trim()) || "Manga";
+    const latestChapter = $card.find(".lsch a").first().text().replace(/\s+/g, " ").trim() || undefined;
+    const rating = $card.find(".rating i").first().text().trim() || undefined;
+    const date = $card.find(".datech").first().text().replace(/\s+/g, " ").trim();
 
     comics.push({
       title,
@@ -1018,9 +1032,14 @@ function komikindoParseListPage($: cheerio.CheerioAPI): any[] {
       image: thumbnail || "",
       href: `/komik/${slug}`,
       type,
+      chapter: latestChapter,
+      rating,
+      description: date || undefined,
     });
+    seen.add(slug);
   });
-  return comics.length > 0 ? comics : [];
+
+  return comics;
 }
 
 function extractKomikindoChapterSlug(href: string): string {
@@ -1108,7 +1127,7 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
     try {
       const page = parseInt(query.page) || 1;
       const comics = await getKomikindoSnapshot(`terbaru:${page}`, async () => {
-        const url = `https://komikindo.ch/komik-terbaru/?page=${page}`;
+        const url = getKomikindoPagedUrl("/komik-terbaru/", page);
         const $ = await fetchHTMLKomikindo(url);
         return komikindoParseListPage($);
       });
@@ -1122,7 +1141,7 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
     try {
       const page = parseInt(query.page) || 1;
       const comics = await getKomikindoSnapshot(`popular:${page}`, async () => {
-        const url = `https://komikindo.ch/komik-populer/?page=${page}`;
+        const url = getKomikindoPagedUrl("/komik-populer/", page);
         const $ = await fetchHTMLKomikindo(url);
         return komikindoParseListPage($);
       });
@@ -1136,8 +1155,10 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
     try {
       const keyword = query.keyword || query.q || "";
       if (!keyword) return apiError("Keyword required", 400);
-      const comics = await getKomikindoSnapshot(`search:${String(keyword).trim().toLowerCase()}`, async () => {
-        const url = `https://komikindo.ch/?s=${encodeURIComponent(keyword)}`;
+      const page = parseInt(query.page) || 1;
+      const searchKey = String(keyword).trim().toLowerCase();
+      const comics = await getKomikindoSnapshot(`search:${searchKey}:${page}`, async () => {
+        const url = getKomikindoPagedUrl("/", page, new URLSearchParams({ s: String(keyword) }));
         const $ = await fetchHTMLKomikindo(url);
         return komikindoParseListPage($);
       });
@@ -1181,7 +1202,7 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
       if (slug) {
         const page = parseInt(query.page) || 1;
         const comics = await getKomikindoSnapshot(`genre:${slug}:${page}`, async () => {
-          const url = `https://komikindo.ch/genre/${slug}/?page=${page}`;
+          const url = getKomikindoPagedUrl(`/genre/${slug}/`, page);
           const $ = await fetchHTMLKomikindo(url);
           return komikindoParseListPage($);
         });
