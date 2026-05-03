@@ -1050,59 +1050,93 @@ function extractKomikindoChapterSlug(href: string): string {
     .split("?")[0];
 }
 
+function komikindoMetaField($: cheerio.CheerioAPI, label: string): string {
+  return $(`span b:contains("${label}")`)
+    .first()
+    .parent()
+    .clone()
+    .find("b")
+    .remove()
+    .end()
+    .text()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function komikindoFetchComicDetail($: cheerio.CheerioAPI): Promise<any> {
-  // Extract title
-  const title = $("h1[class*='title'], .comic-title, .series-title").first().text().trim() || $("title").text().split("|")[0].trim();
+  // Title — strip "Komik " prefix injected by Komikindo
+  const title = ($("h1.entry-title, h1").first().text() || $("title").text().split("|")[0])
+    .replace(/^\s*Komik\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  // Extract description
-  const description = $("[class*='deskripsi'], [class*='description'], .sinopsis, p[class*='desc']").first().text().trim() || "";
+  // Cover image — inside div.thumb which holds the poster
+  const thumbnail = $("div.thumb img").first().attr("src")
+    || $("img[src*='wp-content/uploads']").not("[src*='logo'], [src*='fav']").first().attr("src")
+    || "";
 
-  // Extract thumbnail
-  const thumbnail = $("img[class*='cover'], .comic-cover").attr("src") || $("img").first().attr("src") || "";
+  // Metadata fields — each is a <span><b>Label:</b> value</span>
+  const typeRaw = komikindoMetaField($, "Jenis Komik:");
+  const type = /Manhwa/i.test(typeRaw) ? "Manhwa" : /Manhua/i.test(typeRaw) ? "Manhua" : /Manga/i.test(typeRaw) ? "Manga" : "Manga";
 
-  // Extract genre/type
-  const metaText = $(".meta-info, [class*='info']").text() || "";
-  const typeMatch = metaText.match(/(Manga|Manhwa|Manhua|Webtoon)/i);
-  const type = typeMatch ? typeMatch[1] : "Manga";
+  const statusRaw = komikindoMetaField($, "Status:");
+  const status = /Tamat|Completed/i.test(statusRaw) ? "Completed"
+    : /Ongoing|Berlangsung/i.test(statusRaw) ? "Ongoing"
+    : /Hiatus/i.test(statusRaw) ? "Hiatus"
+    : statusRaw || "Unknown";
 
-  // Extract status
-  const statusText = metaText.match(/(Ongoing|Completed|On Hiatus|Dropped)/i);
-  const status = statusText ? statusText[1] : "Unknown";
+  const author = komikindoMetaField($, "Pengarang:") || komikindoMetaField($, "Author:");
+  const artist = komikindoMetaField($, "Ilustrator:") || komikindoMetaField($, "Artist:");
+  const alternative = komikindoMetaField($, "Judul Alternatif:") || komikindoMetaField($, "Alternative:");
+  const released = komikindoMetaField($, "Rilis:") || komikindoMetaField($, "Released:");
+  const rating = $(".rtg i, .archiveanime-rating i, .ratingmanga i").first().text().trim();
 
-  // Parse chapters
-  const chapters: any[] = [];
-  $("a[href*='-chapter-'], [class*='chapter'] a").each((_, el) => {
-    const $el = $(el);
-    const chTitle = $el.text().trim();
-    const href = $el.attr("href") || "";
-    if (!href || !chTitle) return;
-    const chapterSlug = extractKomikindoChapterSlug(href);
-    if (!chapterSlug) return;
+  // Genres
+  const genre = $(".genre-info a").map((_, el) => $(el).text().trim()).get().join(", ");
 
-    // Extract chapter number from title
-    const numMatch = chTitle.match(/chapter\s*(\d+(?:\.\d+)?)/i) || chTitle.match(/ch\s*(\d+(?:\.\d+)?)/i);
-    const number = numMatch ? parseFloat(numMatch[1]) : chapters.length + 1;
+  // Description — .shortcsc p is the synopsis paragraph
+  const description = $(".shortcsc p, .shortcsc").first().text()
+    .replace(/\s+/g, " ")
+    .trim();
 
-    chapters.push({
-      title: chTitle,
-      href: `/chapter/${chapterSlug}`,
-      number,
-      provider: "komikindo",
-    });
+  // Chapters — collect chapter links, deduplicate, prefer entries with chapter numbers in the title
+  const chapterMap = new Map<string, { title: string; href: string; number: number }>();
+  $("a[href*='-chapter-']").each((_, el) => {
+    const href = ($(el).attr("href") || "").replace(/\/$/, "").split("?")[0];
+    if (!href) return;
+    const slug = extractKomikindoChapterSlug(href);
+    if (!slug) return;
+    const rawTitle = $(el).text().replace(/\s+/g, " ").trim();
+    // Only accept links whose visible text looks like a chapter label, not a date
+    const numMatch = rawTitle.match(/chapter\s*(\d+(?:\.\d+)?)/i);
+    if (!numMatch) return;
+    const number = parseFloat(numMatch[1]);
+    const key = slug;
+    const existing = chapterMap.get(key);
+    if (!existing || number > (existing.number || 0)) {
+      chapterMap.set(key, { title: rawTitle, href: `/chapter/${slug}`, number });
+    }
   });
 
-  const uniqueChapters = [...new Map(chapters.map((chapter) => [chapter.href, chapter])).values()]
-    .sort((a, b) => (b.number || 0) - (a.number || 0));
+  const chapters = Array.from(chapterMap.values())
+    .sort((a, b) => b.number - a.number)
+    .map((ch) => ({ ...ch, provider: "komikindo" as const }));
 
   return {
     title,
     description,
-    thumbnail: thumbnail || "",
-    image: thumbnail || "",
+    thumbnail,
+    image: thumbnail,
     type,
     status,
-    chapters: uniqueChapters,
+    author,
+    artist,
+    alternative,
+    released,
+    rating,
+    genre,
+    chapters,
   };
 }
 
