@@ -794,8 +794,42 @@ function findBestTitleMatch(results: any[], targetTitle: string): any | null {
 
 // ─── Provider Routing ───
 // ─── Komikindo Provider (komikindo.ch) ───
+const KOMIKINDO_HTML_CACHE_LIMIT = 200;
+const komikindoHtmlCache = new Map<string, { body: string; expiresAt: number }>();
+const komikindoInflight = new Map<string, Promise<cheerio.CheerioAPI>>();
+
+function getKomikindoCacheTtl(url: string): number {
+  const normalized = url.toLowerCase();
+  if (normalized.includes("/komik-terbaru") || normalized.includes("/komik-populer")) return 5 * 60 * 1000;
+  if (normalized.includes("/?s=")) return 2 * 60 * 1000;
+  if (normalized.includes("/komik/")) return 10 * 60 * 1000;
+  if (normalized.includes("-chapter-")) return 15 * 60 * 1000;
+  return 3 * 60 * 1000;
+}
+
+function pruneKomikindoCache() {
+  if (komikindoHtmlCache.size <= KOMIKINDO_HTML_CACHE_LIMIT) return;
+  const entries = Array.from(komikindoHtmlCache.entries());
+  entries.sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+  while (komikindoHtmlCache.size > KOMIKINDO_HTML_CACHE_LIMIT && entries.length) {
+    const oldest = entries.shift();
+    if (!oldest) break;
+    komikindoHtmlCache.delete(oldest[0]);
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchHTMLKomikindo(url: string): Promise<cheerio.CheerioAPI> {
+  const now = Date.now();
+  const cached = komikindoHtmlCache.get(url);
+  if (cached && cached.expiresAt > now) {
+    return cheerio.load(cached.body);
+  }
+
+  const inflight = komikindoInflight.get(url);
+  if (inflight) return inflight;
+
+  const fetchPromise = (async () => {
   try {
     const res = await request(url, {
       headers: {
@@ -805,11 +839,22 @@ async function fetchHTMLKomikindo(url: string): Promise<cheerio.CheerioAPI> {
       },
     } as any);
     const body = await res.body.text();
+    komikindoHtmlCache.set(url, {
+      body,
+      expiresAt: now + getKomikindoCacheTtl(url),
+    });
+    pruneKomikindoCache();
     return cheerio.load(body);
   } catch (error) {
     console.error("Komikindo fetch error:", error);
     throw new Error("Gagal mengambil data dari Komikindo");
+  } finally {
+    komikindoInflight.delete(url);
   }
+  })();
+
+  komikindoInflight.set(url, fetchPromise);
+  return fetchPromise;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1048,6 +1093,8 @@ function hashIP(ip: string): string {
 
 function trackRequest(req: VercelRequest, endpoint: string, provider: string) {
   if (!ENABLE_CONTENT_ANALYTICS) return;
+  // Keep Komikindo scraper route stateless and avoid Neon compute writes.
+  if (provider === "komikindo") return;
   // Fire-and-forget: don't await, don't block response
   getAnalyticsDb().then(q => {
     if (!q) return;
@@ -1158,7 +1205,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       read:        "public, s-maxage=600, stale-while-revalidate=3600",  // 10 min + 1 hr stale (panels rarely change)
       health:      "no-cache",
     };
-    res.setHeader("Cache-Control", cacheMap[route] || "public, s-maxage=120, stale-while-revalidate=300");
+    const komikindoCacheMap: Record<string, string> = {
+      genre:       "public, s-maxage=1800, stale-while-revalidate=3600", // 30 min + 1 hr stale
+      popular:     "public, s-maxage=600, stale-while-revalidate=1800",  // 10 min + 30 min stale
+      detail:      "public, s-maxage=900, stale-while-revalidate=3600",  // 15 min + 1 hr stale
+      terbaru:     "public, s-maxage=300, stale-while-revalidate=900",   // 5 min + 15 min stale
+      search:      "public, s-maxage=180, stale-while-revalidate=600",   // 3 min + 10 min stale
+      read:        "public, s-maxage=1800, stale-while-revalidate=7200", // 30 min + 2 hr stale
+      health:      "no-cache",
+    };
+    const activeCacheMap = provider === "komikindo" ? komikindoCacheMap : cacheMap;
+    res.setHeader("Cache-Control", activeCacheMap[route] || "public, s-maxage=120, stale-while-revalidate=300");
 
     return res.status(statusCode).json(result);
   } catch (error) {
