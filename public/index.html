@@ -214,6 +214,13 @@
       </div>
       <div class="pv-info"><b>Method:</b> HTML Scraping<br><b>Parser:</b> Cheerio<br><span id="pKms"></span></div>
     </div>
+    <div class="pv s3">
+      <div class="pv-top">
+        <span class="pv-name">Komikindo</span>
+        <span class="pv-st chk" id="pI">Checking...</span>
+      </div>
+      <div class="pv-info"><b>Method:</b> HTML Scraping<br><b>Parser:</b> Cheerio<br><span id="pIms"></span></div>
+    </div>
   </div>
 
   <!-- Traffic Chart -->
@@ -374,24 +381,31 @@ function es(ep, title) {
 
 /* Provider Health */
 var provs = [
-  { key: 'shinigami', b: 'pS', m: 'pSms' },
-  { key: 'komiku', b: 'pK', m: 'pKms' }
+  { key: 'shinigami', b: 'pS', m: 'pSms', fallback: 'REST API' },
+  { key: 'komiku', b: 'pK', m: 'pKms', fallback: 'HTML Scraping' },
+  { key: 'komikindo', b: 'pI', m: 'pIms', fallback: 'HTML Scraping' }
 ];
-provs.forEach(function(p) {
-  var t0 = Date.now();
-  fetch(API + '/popular?provider=' + p.key).then(function(r) {
-    var ms = Date.now() - t0;
-    if (r.ok) {
-      $(p.b).textContent = 'Online';
-      $(p.b).className = 'pv-st ok';
-      $(p.m).innerHTML = '<b>Latency:</b> ' + ms + 'ms';
-    } else {
-      $(p.b).textContent = 'Error ' + r.status;
-      $(p.b).className = 'pv-st err';
+fetch(API + '/health').then(function(r) { return r.json(); }).then(function(d) {
+  var map = {};
+  (d.providers || []).forEach(function(item) { map[item.id] = item; });
+  provs.forEach(function(p) {
+    var info = map[p.key];
+    if (!info) {
+      $(p.b).textContent = 'Unknown';
+      $(p.b).className = 'pv-st chk';
+      $(p.m).innerHTML = '<b>Status:</b> belum tersedia';
+      return;
     }
-  }).catch(function() {
+
+    $(p.b).textContent = info.online ? 'Online' : 'Offline';
+    $(p.b).className = info.online ? 'pv-st ok' : 'pv-st err';
+    $(p.m).innerHTML = '<b>Latency:</b> ' + (info.responseMs || 0) + 'ms';
+  });
+}).catch(function() {
+  provs.forEach(function(p) {
     $(p.b).textContent = 'Offline';
     $(p.b).className = 'pv-st err';
+    $(p.m).innerHTML = '<b>Status:</b> gagal cek provider';
   });
 });
 /* Analytics */
