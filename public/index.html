@@ -409,7 +409,8 @@ fetch(API + '/health').then(function(r) { return r.json(); }).then(function(d) {
   });
 });
 /* Analytics */
-fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(function(d) {
+var ANALYTICS_URL = API + '/admin/analytics?public=1';
+fetch(ANALYTICS_URL).then(function(r) { return r.json(); }).then(function(d) {
   sv('vVisit', fn(d.unique_visitors || 0));
   sv('vReq', fn(d.total_requests || 0));
   sv('vDay', fn(d.today_requests || 0));
@@ -417,13 +418,24 @@ fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(func
   $('vDaySub').textContent = fn(d.today_visitors || 0) + ' pengunjung';
   $('vWkSub').textContent = fn(d.week_visitors || 0) + ' pengunjung';
 
-  rvs(d.recent_visitors || []);
-  rtc(d.top_comics || []);
-  rcc(d.recent_comic_clicks || []);
   rrk('cProv', d.top_providers || [], 'provider', 'count', false);
   rrk('cCountry', d.top_countries || [], 'country', 'count', true);
   dtc(d.daily_30d || []);
   rmo(d.monthly || {});
+
+  if (d.restricted) {
+    $('vCnt').textContent = 'mode publik';
+    $('tVisit').innerHTML = '<tr><td colspan="7" class="empty">Data detail pengunjung disembunyikan untuk menghemat database</td></tr>';
+    $('cComic').innerHTML = '<div class="empty">Data komik populer detail disembunyikan di mode publik</div>';
+    $('tClick').innerHTML = '<tr><td colspan="4" class="empty">Data klik detail disembunyikan di mode publik</td></tr>';
+    $('btnClear').disabled = true;
+    $('btnClear').textContent = 'Admin Only';
+    return;
+  }
+
+  rvs(d.recent_visitors || []);
+  rtc(d.top_comics || []);
+  rcc(d.recent_comic_clicks || []);
 }).catch(function() {
   ['vVisit','vReq','vDay','vWk'].forEach(function(id) { sv(id, '0'); });
   $('tVisit').innerHTML = '<tr><td colspan="7" class="empty">Gagal memuat data</td></tr>';
@@ -588,12 +600,16 @@ var _rt;
 window.addEventListener('resize', function() {
   clearTimeout(_rt);
   _rt = setTimeout(function() {
-    fetch(API + '/admin/analytics').then(function(r) { return r.json(); }).then(function(d) { dtc(d.daily_30d || []); });
+    fetch(ANALYTICS_URL).then(function(r) { return r.json(); }).then(function(d) { dtc(d.daily_30d || []); });
   }, 300);
 });
 
 /* Clear old analytics */
 function clearOldData() {
+  if ($('btnClear').disabled) {
+    alert('Aksi ini hanya tersedia untuk admin.');
+    return;
+  }
   if (!confirm('Hapus semua data analytics bulan lalu? Data bulan ini tetap aman.')) return;
   var btn = $('btnClear');
   btn.disabled = true;

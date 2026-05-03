@@ -854,6 +854,79 @@ function findBestTitleMatch(results: any[], targetTitle: string): any | null {
 const KOMIKINDO_HTML_CACHE_LIMIT = 200;
 const komikindoHtmlCache = new Map<string, { body: string; expiresAt: number }>();
 const komikindoInflight = new Map<string, Promise<cheerio.CheerioAPI>>();
+const KOMIKINDO_SNAPSHOT_CACHE_LIMIT = 300;
+const komikindoSnapshotCache = new Map<string, { value: unknown; expiresAt: number; staleUntil: number }>();
+const komikindoSnapshotInflight = new Map<string, Promise<unknown>>();
+
+function getKomikindoSnapshotPolicy(key: string): { ttl: number; staleTtl: number } {
+  if (key.startsWith("genre:")) return { ttl: 30 * 60 * 1000, staleTtl: 48 * 60 * 60 * 1000 };
+  if (key.startsWith("popular:")) return { ttl: 15 * 60 * 1000, staleTtl: 24 * 60 * 60 * 1000 };
+  if (key.startsWith("detail:")) return { ttl: 30 * 60 * 1000, staleTtl: 24 * 60 * 60 * 1000 };
+  if (key.startsWith("read:")) return { ttl: 60 * 60 * 1000, staleTtl: 48 * 60 * 60 * 1000 };
+  if (key.startsWith("search:")) return { ttl: 5 * 60 * 1000, staleTtl: 12 * 60 * 60 * 1000 };
+  return { ttl: 10 * 60 * 1000, staleTtl: 12 * 60 * 60 * 1000 };
+}
+
+function pruneKomikindoSnapshotCache() {
+  if (komikindoSnapshotCache.size <= KOMIKINDO_SNAPSHOT_CACHE_LIMIT) return;
+  const entries = Array.from(komikindoSnapshotCache.entries());
+  entries.sort((a, b) => a[1].staleUntil - b[1].staleUntil);
+  while (komikindoSnapshotCache.size > KOMIKINDO_SNAPSHOT_CACHE_LIMIT && entries.length) {
+    const oldest = entries.shift();
+    if (!oldest) break;
+    komikindoSnapshotCache.delete(oldest[0]);
+  }
+}
+
+function storeKomikindoSnapshot(key: string, value: unknown) {
+  const now = Date.now();
+  const policy = getKomikindoSnapshotPolicy(key);
+  komikindoSnapshotCache.set(key, {
+    value,
+    expiresAt: now + policy.ttl,
+    staleUntil: now + policy.staleTtl,
+  });
+  pruneKomikindoSnapshotCache();
+}
+
+async function getKomikindoSnapshot<T>(key: string, loader: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const cached = komikindoSnapshotCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.value as T;
+  }
+
+  const inflight = komikindoSnapshotInflight.get(key);
+  if (inflight) return inflight as Promise<T>;
+
+  if (cached && cached.staleUntil > now) {
+    const refreshPromise = (async () => {
+      try {
+        const value = await loader();
+        storeKomikindoSnapshot(key, value);
+        return value;
+      } finally {
+        komikindoSnapshotInflight.delete(key);
+      }
+    })();
+
+    komikindoSnapshotInflight.set(key, refreshPromise);
+    return cached.value as T;
+  }
+
+  const promise = (async () => {
+    try {
+      const value = await loader();
+      storeKomikindoSnapshot(key, value);
+      return value;
+    } finally {
+      komikindoSnapshotInflight.delete(key);
+    }
+  })();
+
+  komikindoSnapshotInflight.set(key, promise);
+  return promise;
+}
 
 function getKomikindoCacheTtl(url: string): number {
   const normalized = url.toLowerCase();
@@ -950,6 +1023,14 @@ function komikindoParseListPage($: cheerio.CheerioAPI): any[] {
   return comics.length > 0 ? comics : [];
 }
 
+function extractKomikindoChapterSlug(href: string): string {
+  return href
+    .replace(/^https?:\/\/[^/]+\//i, "")
+    .replace(/^\//, "")
+    .replace(/\/$/, "")
+    .split("?")[0];
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function komikindoFetchComicDetail($: cheerio.CheerioAPI): Promise<any> {
   // Extract title
@@ -977,6 +1058,8 @@ async function komikindoFetchComicDetail($: cheerio.CheerioAPI): Promise<any> {
     const chTitle = $el.text().trim();
     const href = $el.attr("href") || "";
     if (!href || !chTitle) return;
+    const chapterSlug = extractKomikindoChapterSlug(href);
+    if (!chapterSlug) return;
 
     // Extract chapter number from title
     const numMatch = chTitle.match(/chapter\s*(\d+(?:\.\d+)?)/i) || chTitle.match(/ch\s*(\d+(?:\.\d+)?)/i);
@@ -984,10 +1067,14 @@ async function komikindoFetchComicDetail($: cheerio.CheerioAPI): Promise<any> {
 
     chapters.push({
       title: chTitle,
-      href,
+      href: `/chapter/${chapterSlug}`,
       number,
+      provider: "komikindo",
     });
   });
+
+  const uniqueChapters = [...new Map(chapters.map((chapter) => [chapter.href, chapter])).values()]
+    .sort((a, b) => (b.number || 0) - (a.number || 0));
 
   return {
     title,
@@ -996,7 +1083,7 @@ async function komikindoFetchComicDetail($: cheerio.CheerioAPI): Promise<any> {
     image: thumbnail || "",
     type,
     status,
-    chapters: chapters.reverse(), // newest first
+    chapters: uniqueChapters,
   };
 }
 
@@ -1020,9 +1107,11 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
   terbaru: async (query) => {
     try {
       const page = parseInt(query.page) || 1;
-      const url = `https://komikindo.ch/komik-terbaru/?page=${page}`;
-      const $ = await fetchHTMLKomikindo(url);
-      const comics = komikindoParseListPage($);
+      const comics = await getKomikindoSnapshot(`terbaru:${page}`, async () => {
+        const url = `https://komikindo.ch/komik-terbaru/?page=${page}`;
+        const $ = await fetchHTMLKomikindo(url);
+        return komikindoParseListPage($);
+      });
       return apiResponse(comics);
     } catch (error) {
       return apiError("Gagal fetch komik terbaru", 500);
@@ -1032,9 +1121,11 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
   popular: async (query) => {
     try {
       const page = parseInt(query.page) || 1;
-      const url = `https://komikindo.ch/komik-populer/?page=${page}`;
-      const $ = await fetchHTMLKomikindo(url);
-      const comics = komikindoParseListPage($);
+      const comics = await getKomikindoSnapshot(`popular:${page}`, async () => {
+        const url = `https://komikindo.ch/komik-populer/?page=${page}`;
+        const $ = await fetchHTMLKomikindo(url);
+        return komikindoParseListPage($);
+      });
       return apiResponse(comics);
     } catch (error) {
       return apiError("Gagal fetch komik populer", 500);
@@ -1045,9 +1136,11 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
     try {
       const keyword = query.keyword || query.q || "";
       if (!keyword) return apiError("Keyword required", 400);
-      const url = `https://komikindo.ch/?s=${encodeURIComponent(keyword)}`;
-      const $ = await fetchHTMLKomikindo(url);
-      const comics = komikindoParseListPage($);
+      const comics = await getKomikindoSnapshot(`search:${String(keyword).trim().toLowerCase()}`, async () => {
+        const url = `https://komikindo.ch/?s=${encodeURIComponent(keyword)}`;
+        const $ = await fetchHTMLKomikindo(url);
+        return komikindoParseListPage($);
+      });
       return apiResponse(comics);
     } catch (error) {
       return apiError("Gagal cari komik", 500);
@@ -1057,9 +1150,11 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
   detail: async (_query, slug) => {
     try {
       if (!slug) return apiError("Slug required", 400);
-      const url = `https://komikindo.ch/komik/${slug}/`;
-      const $ = await fetchHTMLKomikindo(url);
-      const detail = await komikindoFetchComicDetail($);
+      const detail = await getKomikindoSnapshot(`detail:${slug}`, async () => {
+        const url = `https://komikindo.ch/komik/${slug}/`;
+        const $ = await fetchHTMLKomikindo(url);
+        return komikindoFetchComicDetail($);
+      });
       return apiResponse(detail);
     } catch (error) {
       return apiError("Komik tidak ditemukan", 404);
@@ -1069,10 +1164,13 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
   read: async (_query, slug) => {
     try {
       if (!slug) return apiError("Slug required", 400);
-      const url = `https://komikindo.ch/${slug}/`;
-      const $ = await fetchHTMLKomikindo(url);
-      const images = await komikindoFetchChapterImages($);
-      return apiResponse([{ images, chapter: slug }]);
+      const chapterData = await getKomikindoSnapshot(`read:${slug}`, async () => {
+        const url = `https://komikindo.ch/${slug}/`;
+        const $ = await fetchHTMLKomikindo(url);
+        const panel = await komikindoFetchChapterImages($);
+        return [{ title: slug, panel }];
+      });
+      return apiResponse(chapterData);
     } catch (error) {
       return apiError("Chapter tidak ditemukan", 404);
     }
@@ -1082,12 +1180,15 @@ const komikindoHandlers: Record<string, (query: any, slug?: string) => Promise<a
     try {
       if (slug) {
         const page = parseInt(query.page) || 1;
-        const url = `https://komikindo.ch/genre/${slug}/?page=${page}`;
-        const $ = await fetchHTMLKomikindo(url);
-        return apiResponse(komikindoParseListPage($));
+        const comics = await getKomikindoSnapshot(`genre:${slug}:${page}`, async () => {
+          const url = `https://komikindo.ch/genre/${slug}/?page=${page}`;
+          const $ = await fetchHTMLKomikindo(url);
+          return komikindoParseListPage($);
+        });
+        return apiResponse(comics);
       }
       // Return hardcoded genre list
-      const genres = ["action", "adventure", "comedy", "drama", "ecchi", "fantasy", "horror", "isekai", "romance", "school", "shounen"];
+      const genres = await getKomikindoSnapshot("genre:list", async () => ["action", "adventure", "comedy", "drama", "ecchi", "fantasy", "horror", "isekai", "romance", "school", "shounen"]);
       return apiResponse(genres.map(g => ({
         title: g.charAt(0).toUpperCase() + g.slice(1),
         href: `/genre/${g}`,

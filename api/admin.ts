@@ -5,8 +5,8 @@ let _jwt: any;
 let _bcrypt: any;
 let _seedColsMigrated = false;
 let _analyticsTableEnsured = false;
-let _analyticsCache: { value: any; expiresAt: number } | null = null;
-const ANALYTICS_CACHE_TTL = 60_000;
+let _publicAnalyticsCache: { value: any; expiresAt: number } | null = null;
+const ANALYTICS_PUBLIC_CACHE_TTL = 60_000;
 
 async function loadAll() {
   if (!_query) {
@@ -115,6 +115,25 @@ async function verifyAdmin(req: VercelRequest): Promise<any> {
   const user = rows[0];
   if (user.role !== 'admin' && user.role !== 'owner') return null;
   return { ...payload, role: user.role };
+}
+
+async function ensureAnalyticsTable() {
+  if (_analyticsTableEnsured) return;
+  try {
+    await _query(`
+      CREATE TABLE IF NOT EXISTS api_analytics (
+        id SERIAL PRIMARY KEY,
+        ip_hash VARCHAR(64) NOT NULL,
+        endpoint VARCHAR(255) NOT NULL,
+        provider VARCHAR(50),
+        user_agent TEXT,
+        referer TEXT,
+        country VARCHAR(10),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `);
+  } catch { /* ignore */ }
+  _analyticsTableEnsured = true;
 }
 
 // ─── Fake data pools ───
@@ -258,54 +277,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const earlyPath = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
   const earlyResource = earlyPath.split("/")[0] || "";
 
-  // ─── Clear Old Analytics (public, used by dashboard) ───
-  if (earlyResource === "clear-monthly" && req.method === "POST") {
-    await _query("DELETE FROM api_analytics WHERE created_at < date_trunc('month', CURRENT_DATE)");
-    _analyticsCache = null;
-    return res.status(200).json({ success: true, message: "Data bulan lalu berhasil dihapus" });
-  }
-
-  if (earlyResource === "analytics" && req.method === "GET") {
+  if (earlyResource === "analytics" && req.method === "GET" && String(req.query.public || "") === "1") {
     const now = Date.now();
-    if (_analyticsCache && _analyticsCache.expiresAt > now) {
+    if (_publicAnalyticsCache && _publicAnalyticsCache.expiresAt > now) {
       res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
-      return res.status(200).json(_analyticsCache.value);
+      return res.status(200).json(_publicAnalyticsCache.value);
     }
 
-    if (!_analyticsTableEnsured) {
-      try {
-        await _query(`
-          CREATE TABLE IF NOT EXISTS api_analytics (
-            id SERIAL PRIMARY KEY,
-            ip_hash VARCHAR(64) NOT NULL,
-            endpoint VARCHAR(255) NOT NULL,
-            provider VARCHAR(50),
-            user_agent TEXT,
-            referer TEXT,
-            country VARCHAR(10),
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          )
-        `);
-      } catch { /* ignore */ }
-      _analyticsTableEnsured = true;
-    }
+    await ensureAnalyticsTable();
 
     const [
       totalRequests,
       uniqueVisitors,
       todayRequests,
       todayVisitors,
-      topEndpoints,
       topProviders,
       topCountries,
-      hourlyStats,
       dailyStats,
-      recentRequests,
       weekRequests,
       weekVisitors,
-      topComics,
-      recentComicClicks,
-      recentVisitors,
       monthRequests,
       monthVisitors,
       monthDailyActivity,
@@ -314,41 +304,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics"),
       _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
-      _query("SELECT endpoint, COUNT(*) as count FROM api_analytics GROUP BY endpoint ORDER BY count DESC LIMIT 10"),
       _query("SELECT provider, COUNT(*) as count FROM api_analytics WHERE provider IS NOT NULL GROUP BY provider ORDER BY count DESC"),
       _query("SELECT country, COUNT(*) as count FROM api_analytics WHERE country IS NOT NULL AND country != '' GROUP BY country ORDER BY count DESC LIMIT 10"),
-      _query(`SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count 
-              FROM api_analytics WHERE created_at >= CURRENT_DATE 
-              GROUP BY hour ORDER BY hour`),
       _query(`SELECT DATE(created_at) as date, COUNT(*) as count, COUNT(DISTINCT ip_hash) as visitors 
               FROM api_analytics WHERE created_at >= NOW() - INTERVAL '30 days' 
               GROUP BY date ORDER BY date`),
-      _query(`SELECT endpoint, provider, country, created_at 
-              FROM api_analytics ORDER BY created_at DESC LIMIT 20`),
       _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
-      _query(`SELECT a.endpoint, COUNT(*) as count, COUNT(DISTINCT a.ip_hash) as unique_viewers,
-              MAX(cv.comic_title) as comic_title
-              FROM api_analytics a
-              LEFT JOIN comic_views cv ON cv.comic_slug = REPLACE(a.endpoint, '/detail/', '')
-              WHERE a.endpoint LIKE '/detail/%' 
-              GROUP BY a.endpoint ORDER BY count DESC LIMIT 15`).catch(() => []),
-      _query(`SELECT a.ip_hash, a.endpoint, a.provider, a.country, a.user_agent, a.created_at,
-              cv.comic_title
-              FROM api_analytics a
-              LEFT JOIN comic_views cv ON cv.comic_slug = REPLACE(a.endpoint, '/detail/', '')
-              WHERE a.endpoint LIKE '/detail/%' 
-              ORDER BY a.created_at DESC LIMIT 30`).catch(() => []),
-      _query(`SELECT ip_hash, COUNT(*) as total_requests,
-                     COUNT(DISTINCT endpoint) as pages_viewed,
-                     COUNT(CASE WHEN endpoint LIKE '/detail/%' THEN 1 END) as comic_clicks,
-                     MAX(created_at) as last_seen,
-                     MIN(created_at) as first_seen,
-                     MAX(country) as country,
-                     MAX(user_agent) as user_agent
-              FROM api_analytics 
-              GROUP BY ip_hash 
-              ORDER BY last_seen DESC LIMIT 30`),
       _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
       _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
       _query(`SELECT DATE(created_at) as date, COUNT(*) as requests, COUNT(DISTINCT ip_hash) as visitors 
@@ -357,21 +319,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ]);
 
     const payload = {
+      restricted: true,
+      message: "Mode publik dibatasi untuk menghemat Neon compute.",
       total_requests: parseInt(totalRequests[0]?.count || "0"),
       unique_visitors: parseInt(uniqueVisitors[0]?.count || "0"),
       today_requests: parseInt(todayRequests[0]?.count || "0"),
       today_visitors: parseInt(todayVisitors[0]?.count || "0"),
       week_requests: parseInt(weekRequests[0]?.count || "0"),
       week_visitors: parseInt(weekVisitors[0]?.count || "0"),
-      top_endpoints: topEndpoints,
       top_providers: topProviders,
       top_countries: topCountries,
-      hourly_today: hourlyStats,
       daily_30d: dailyStats,
-      recent_requests: recentRequests,
-      top_comics: topComics,
-      recent_comic_clicks: recentComicClicks,
-      recent_visitors: recentVisitors,
+      top_endpoints: [],
+      recent_requests: [],
+      top_comics: [],
+      recent_comic_clicks: [],
+      recent_visitors: [],
       monthly: {
         requests: parseInt(monthRequests[0]?.count || "0"),
         visitors: parseInt(monthVisitors[0]?.count || "0"),
@@ -379,9 +342,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     };
 
-    _analyticsCache = {
+    _publicAnalyticsCache = {
       value: payload,
-      expiresAt: now + ANALYTICS_CACHE_TTL,
+      expiresAt: now + ANALYTICS_PUBLIC_CACHE_TTL,
     };
     res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
     return res.status(200).json(payload);
@@ -392,6 +355,108 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const path = (req.url || "").split("?")[0].replace(/^\/api\/admin\/?/, "");
   const resource = path.split("/")[0] || "";
+
+    if (resource === "clear-monthly" && req.method === "POST") {
+      await ensureAnalyticsTable();
+      await _query("DELETE FROM api_analytics WHERE created_at < date_trunc('month', CURRENT_DATE)");
+      _publicAnalyticsCache = null;
+      return res.status(200).json({ success: true, message: "Data bulan lalu berhasil dihapus" });
+    }
+
+    if (resource === "analytics" && req.method === "GET") {
+      await ensureAnalyticsTable();
+
+      const [
+        totalRequests,
+        uniqueVisitors,
+        todayRequests,
+        todayVisitors,
+        topEndpoints,
+        topProviders,
+        topCountries,
+        hourlyStats,
+        dailyStats,
+        recentRequests,
+        weekRequests,
+        weekVisitors,
+        topComics,
+        recentComicClicks,
+        recentVisitors,
+        monthRequests,
+        monthVisitors,
+        monthDailyActivity,
+      ] = await Promise.all([
+        _query("SELECT COUNT(*) as count FROM api_analytics"),
+        _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics"),
+        _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
+        _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= CURRENT_DATE"),
+        _query("SELECT endpoint, COUNT(*) as count FROM api_analytics GROUP BY endpoint ORDER BY count DESC LIMIT 10"),
+        _query("SELECT provider, COUNT(*) as count FROM api_analytics WHERE provider IS NOT NULL GROUP BY provider ORDER BY count DESC"),
+        _query("SELECT country, COUNT(*) as count FROM api_analytics WHERE country IS NOT NULL AND country != '' GROUP BY country ORDER BY count DESC LIMIT 10"),
+        _query(`SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count 
+                FROM api_analytics WHERE created_at >= CURRENT_DATE 
+                GROUP BY hour ORDER BY hour`),
+        _query(`SELECT DATE(created_at) as date, COUNT(*) as count, COUNT(DISTINCT ip_hash) as visitors 
+                FROM api_analytics WHERE created_at >= NOW() - INTERVAL '30 days' 
+                GROUP BY date ORDER BY date`),
+        _query(`SELECT endpoint, provider, country, created_at 
+                FROM api_analytics ORDER BY created_at DESC LIMIT 20`),
+        _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
+        _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= NOW() - INTERVAL '7 days'"),
+        _query(`SELECT a.endpoint, COUNT(*) as count, COUNT(DISTINCT a.ip_hash) as unique_viewers,
+                MAX(cv.comic_title) as comic_title
+                FROM api_analytics a
+                LEFT JOIN comic_views cv ON cv.comic_slug = REPLACE(a.endpoint, '/detail/', '')
+                WHERE a.endpoint LIKE '/detail/%' 
+                GROUP BY a.endpoint ORDER BY count DESC LIMIT 15`).catch(() => []),
+        _query(`SELECT a.ip_hash, a.endpoint, a.provider, a.country, a.user_agent, a.created_at,
+                cv.comic_title
+                FROM api_analytics a
+                LEFT JOIN comic_views cv ON cv.comic_slug = REPLACE(a.endpoint, '/detail/', '')
+                WHERE a.endpoint LIKE '/detail/%' 
+                ORDER BY a.created_at DESC LIMIT 30`).catch(() => []),
+        _query(`SELECT ip_hash, COUNT(*) as total_requests,
+                       COUNT(DISTINCT endpoint) as pages_viewed,
+                       COUNT(CASE WHEN endpoint LIKE '/detail/%' THEN 1 END) as comic_clicks,
+                       MAX(created_at) as last_seen,
+                       MIN(created_at) as first_seen,
+                       MAX(country) as country,
+                       MAX(user_agent) as user_agent
+                FROM api_analytics 
+                GROUP BY ip_hash 
+                ORDER BY last_seen DESC LIMIT 30`),
+        _query("SELECT COUNT(*) as count FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
+        _query("SELECT COUNT(DISTINCT ip_hash) as count FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE)"),
+        _query(`SELECT DATE(created_at) as date, COUNT(*) as requests, COUNT(DISTINCT ip_hash) as visitors 
+                FROM api_analytics WHERE created_at >= date_trunc('month', CURRENT_DATE) 
+                GROUP BY DATE(created_at) ORDER BY date DESC`),
+      ]);
+
+      res.setHeader("Cache-Control", "private, no-store");
+      return res.status(200).json({
+        restricted: false,
+        total_requests: parseInt(totalRequests[0]?.count || "0"),
+        unique_visitors: parseInt(uniqueVisitors[0]?.count || "0"),
+        today_requests: parseInt(todayRequests[0]?.count || "0"),
+        today_visitors: parseInt(todayVisitors[0]?.count || "0"),
+        week_requests: parseInt(weekRequests[0]?.count || "0"),
+        week_visitors: parseInt(weekVisitors[0]?.count || "0"),
+        top_endpoints: topEndpoints,
+        top_providers: topProviders,
+        top_countries: topCountries,
+        hourly_today: hourlyStats,
+        daily_30d: dailyStats,
+        recent_requests: recentRequests,
+        top_comics: topComics,
+        recent_comic_clicks: recentComicClicks,
+        recent_visitors: recentVisitors,
+        monthly: {
+          requests: parseInt(monthRequests[0]?.count || "0"),
+          visitors: parseInt(monthVisitors[0]?.count || "0"),
+          daily_activity: monthDailyActivity,
+        },
+      });
+    }
 
     // ─── Stats ───
     if (resource === "stats" && req.method === "GET") {
@@ -441,8 +506,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         recent_comments: recentComments,
       });
     }
-
-    // clear-monthly moved to public section above
 
     // ─── Users ───
     if (resource === "users") {
