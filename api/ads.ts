@@ -39,6 +39,14 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
   .map(normalizeOriginValue)
   .filter(Boolean);
 const PUBLIC_ADS_TTL = 60 * 1000;
+const LEGACY_SLOT_ALIASES: Record<string, string> = {
+  "home-top": "home-bottom-3",
+  "home-mid": "home-bottom-4",
+};
+
+function normalizeSlotName(slot: string): string {
+  return LEGACY_SLOT_ALIASES[slot] || slot;
+}
 
 async function loadQuery() {
   if (_query) return;
@@ -83,17 +91,17 @@ async function buildPublicAdsPayload() {
 
   const adsEnabled = settingsRows[0]?.value !== "false";
   const ads: Record<string, string> = {};
-  const disabledSlots: string[] = [];
-  const managedSlots: string[] = [];
+  const disabledSlots = new Set<string>();
+  const managedSlots = new Set<string>();
   for (const row of adRows) {
-    const slotName = String(row.slot_name || "").trim();
+    const slotName = normalizeSlotName(String(row.slot_name || "").trim());
     const adCode = String(row.ad_code || "");
     if (!slotName) continue;
 
-    managedSlots.push(slotName);
+    managedSlots.add(slotName);
 
     if (row.is_active === false) {
-      disabledSlots.push(slotName);
+      disabledSlots.add(slotName);
       continue;
     }
 
@@ -104,8 +112,8 @@ async function buildPublicAdsPayload() {
   return {
     ads_enabled: adsEnabled,
     ads,
-    disabled_slots: disabledSlots,
-    managed_slots: managedSlots,
+    disabled_slots: Array.from(disabledSlots),
+    managed_slots: Array.from(managedSlots),
     generated_at: new Date().toISOString(),
   };
 }

@@ -89,8 +89,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Seed ad placements
     const adSlots = [
-      ["home-top", "Banner Atas Homepage", "home"],
-      ["home-mid", "Banner Tengah Homepage", "home"],
+      ["home-bottom-1", "Banner Bawah Homepage 1", "home"],
+      ["home-bottom-2", "Banner Bawah Homepage 2", "home"],
+      ["home-bottom-3", "Banner Bawah Homepage 3", "home"],
+      ["home-bottom-4", "Banner Bawah Homepage 4", "home"],
       ["detail-sidebar", "Sidebar Detail Page", "detail"],
       ["detail-before-chapters", "Sebelum Daftar Chapter", "detail"],
       ["reader-top", "Atas Reader Page", "reader"],

@@ -48,12 +48,20 @@ async function loadAll() {
       // Rename old slot names to new ones
       await _query("UPDATE ad_placements SET slot_name = 'home-bottom-1', label = 'Banner Bawah Homepage 1', position = 'home' WHERE slot_name = 'home-bottom'");
       await _query("UPDATE ad_placements SET slot_name = 'home-bottom-2', label = 'Banner Bawah Homepage 2', position = 'home' WHERE slot_name = 'sticky-mobile'");
+      await _query("UPDATE ad_placements SET slot_name = 'home-bottom-3', label = 'Banner Bawah Homepage 3', position = 'home' WHERE slot_name = 'home-top' AND NOT EXISTS (SELECT 1 FROM ad_placements WHERE slot_name = 'home-bottom-3')");
+      await _query("UPDATE ad_placements SET slot_name = 'home-bottom-4', label = 'Banner Bawah Homepage 4', position = 'home' WHERE slot_name = 'home-mid' AND NOT EXISTS (SELECT 1 FROM ad_placements WHERE slot_name = 'home-bottom-4')");
+      await _query("UPDATE ad_placements SET label = 'Banner Bawah Homepage 1', position = 'home' WHERE slot_name = 'home-bottom-1'");
+      await _query("UPDATE ad_placements SET label = 'Banner Bawah Homepage 2', position = 'home' WHERE slot_name = 'home-bottom-2'");
+      await _query("UPDATE ad_placements SET label = 'Banner Bawah Homepage 3', position = 'home' WHERE slot_name = 'home-bottom-3'");
+      await _query("UPDATE ad_placements SET label = 'Banner Bawah Homepage 4', position = 'home' WHERE slot_name = 'home-bottom-4'");
       // Ensure new ad slots exist
       await _query(`INSERT INTO ad_placements (slot_name, label, position, is_active) VALUES
         ('popup-global', 'Banner di Bawah Navbar (Global)', 'global', false),
         ('native-detail', 'Native Banner Detail Page', 'detail', false),
         ('home-bottom-1', 'Banner Bawah Homepage 1', 'home', false),
         ('home-bottom-2', 'Banner Bawah Homepage 2', 'home', false),
+        ('home-bottom-3', 'Banner Bawah Homepage 3', 'home', false),
+        ('home-bottom-4', 'Banner Bawah Homepage 4', 'home', false),
         ('browse-banner', 'Banner Genre & Pencarian', 'home', false)
         ON CONFLICT (slot_name) DO NOTHING`);
       // Remove deprecated ad slots
