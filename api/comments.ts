@@ -41,6 +41,23 @@ interface JwtPayload {
   role: string;
 }
 
+function appendVaryHeader(res: VercelResponse, value: string) {
+  const current = res.getHeader("Vary");
+  const currentValue = Array.isArray(current) ? current.join(", ") : String(current || "");
+  const varyParts = currentValue
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (!varyParts.some((part) => part.toLowerCase() === value.toLowerCase())) {
+    varyParts.push(value);
+  }
+
+  if (varyParts.length > 0) {
+    res.setHeader("Vary", varyParts.join(", "));
+  }
+}
+
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = normalizeOriginValue(String(req.headers.origin || ""));
   const allowedOrigin = !origin
@@ -53,6 +70,7 @@ function setCors(req: VercelRequest, res: VercelResponse) {
     )
       ? origin
       : "";
+  appendVaryHeader(res, "Origin");
   if (allowedOrigin) res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");

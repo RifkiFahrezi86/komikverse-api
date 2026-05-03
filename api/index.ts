@@ -22,6 +22,23 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
 const API_SECRET = process.env.API_SECRET || "";
 const ENABLE_CONTENT_ANALYTICS = process.env.ENABLE_CONTENT_ANALYTICS === "1";
 
+function appendVaryHeader(res: VercelResponse, value: string) {
+  const current = res.getHeader("Vary");
+  const currentValue = Array.isArray(current) ? current.join(", ") : String(current || "");
+  const varyParts = currentValue
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (!varyParts.some((part) => part.toLowerCase() === value.toLowerCase())) {
+    varyParts.push(value);
+  }
+
+  if (varyParts.length > 0) {
+    res.setHeader("Vary", varyParts.join(", "));
+  }
+}
+
 // Rate limiting per IP (in-memory, resets on cold start)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 60; // max requests per window
@@ -1355,6 +1372,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
       ? origin
       : "";
+  appendVaryHeader(res, "Origin");
   if (allowedOrigin) res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Api-Token, X-Api-Timestamp");

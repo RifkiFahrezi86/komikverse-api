@@ -70,9 +70,27 @@ function resolveAllowedOrigin(origin: string): string {
   return "";
 }
 
+function appendVaryHeader(res: VercelResponse, value: string) {
+  const current = res.getHeader("Vary");
+  const currentValue = Array.isArray(current) ? current.join(", ") : String(current || "");
+  const varyParts = currentValue
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (!varyParts.some((part) => part.toLowerCase() === value.toLowerCase())) {
+    varyParts.push(value);
+  }
+
+  if (varyParts.length > 0) {
+    res.setHeader("Vary", varyParts.join(", "));
+  }
+}
+
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || "";
   const allowedOrigin = resolveAllowedOrigin(origin);
+  appendVaryHeader(res, "Origin");
   if (allowedOrigin) res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
