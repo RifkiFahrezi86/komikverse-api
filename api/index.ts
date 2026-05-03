@@ -4,9 +4,21 @@ import crypto from "crypto";
 import * as cheerio from "cheerio";
 
 // ─── Security Config ───
-const BUILTIN_ALLOWED_ORIGINS = ["capacitor://localhost", "ionic://localhost"];
+const BUILTIN_ALLOWED_ORIGINS = [
+  "capacitor://localhost",
+  "ionic://localhost",
+  "https://komikverse-swart.vercel.app",
+  "https://komikverse.vercel.app",
+];
 const LOCALHOST_ORIGIN_RE = /^https?:\/\/localhost(?::\d+)?$/i;
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
+function normalizeOriginValue(value: string): string {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(normalizeOriginValue)
+  .filter(Boolean);
 const API_SECRET = process.env.API_SECRET || "";
 const ENABLE_CONTENT_ANALYTICS = process.env.ENABLE_CONTENT_ANALYTICS === "1";
 
@@ -1332,7 +1344,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 
   // CORS — only allow specific origins
-  const origin = req.headers.origin || "";
+  const origin = normalizeOriginValue(String(req.headers.origin || ""));
   const allowedOrigin = !origin
     ? (ALLOWED_ORIGINS.length === 0 ? "*" : "")
     : (

@@ -64,9 +64,21 @@ async function loadAll() {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
-const BUILTIN_ALLOWED_ORIGINS = ["capacitor://localhost", "ionic://localhost"];
+const BUILTIN_ALLOWED_ORIGINS = [
+  "capacitor://localhost",
+  "ionic://localhost",
+  "https://komikverse-swart.vercel.app",
+  "https://komikverse.vercel.app",
+];
 const LOCALHOST_ORIGIN_RE = /^https?:\/\/localhost(?::\d+)?$/i;
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
+function normalizeOriginValue(value: string): string {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(normalizeOriginValue)
+  .filter(Boolean);
 
 interface JwtPayload {
   id: number;
@@ -75,7 +87,7 @@ interface JwtPayload {
 }
 
 function setCors(req: VercelRequest, res: VercelResponse) {
-  const origin = req.headers.origin || "";
+  const origin = normalizeOriginValue(String(req.headers.origin || ""));
   const allowedOrigin = !origin
     ? (ALLOWED_ORIGINS.length === 0 ? "*" : "")
     : (

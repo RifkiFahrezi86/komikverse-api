@@ -23,9 +23,21 @@ let publicAdsInflight:
     }>
   | null = null;
 
-const BUILTIN_ALLOWED_ORIGINS = ["capacitor://localhost", "ionic://localhost"];
+const BUILTIN_ALLOWED_ORIGINS = [
+  "capacitor://localhost",
+  "ionic://localhost",
+  "https://komikverse-swart.vercel.app",
+  "https://komikverse.vercel.app",
+];
 const LOCALHOST_ORIGIN_RE = /^https?:\/\/localhost(?::\d+)?$/i;
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
+function normalizeOriginValue(value: string): string {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(normalizeOriginValue)
+  .filter(Boolean);
 const PUBLIC_ADS_TTL = 60 * 1000;
 
 async function loadQuery() {
@@ -41,7 +53,7 @@ async function loadQuery() {
 }
 
 function setCors(req: VercelRequest, res: VercelResponse) {
-  const origin = req.headers.origin || "";
+  const origin = normalizeOriginValue(String(req.headers.origin || ""));
   const allowedOrigin = !origin
     ? (ALLOWED_ORIGINS.length === 0 ? "*" : "")
     : (

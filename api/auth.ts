@@ -9,8 +9,18 @@ let _authSchemaReady = false;
 const BUILTIN_ALLOWED_ORIGINS = [
   "capacitor://localhost",
   "ionic://localhost",
+  "https://komikverse-swart.vercel.app",
+  "https://komikverse.vercel.app",
 ];
 const LOCALHOST_ORIGIN_RE = /^https?:\/\/localhost(?::\d+)?$/i;
+function normalizeOriginValue(value: string): string {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(normalizeOriginValue)
+  .filter(Boolean);
 
 async function loadAll() {
   if (!_query) {
@@ -38,7 +48,6 @@ async function loadAll() {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "komikverse-secret-key-change-me";
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean);
 
 async function ensureAuthSchema() {
   if (_authSchemaReady) return;
@@ -48,14 +57,15 @@ async function ensureAuthSchema() {
 }
 
 function resolveAllowedOrigin(origin: string): string {
-  if (!origin) return ALLOWED_ORIGINS.length === 0 ? "*" : "";
+  const normalizedOrigin = normalizeOriginValue(origin);
+  if (!normalizedOrigin) return ALLOWED_ORIGINS.length === 0 ? "*" : "";
   if (
     ALLOWED_ORIGINS.length === 0
-    || ALLOWED_ORIGINS.includes(origin)
-    || BUILTIN_ALLOWED_ORIGINS.includes(origin)
-    || LOCALHOST_ORIGIN_RE.test(origin)
+    || ALLOWED_ORIGINS.includes(normalizedOrigin)
+    || BUILTIN_ALLOWED_ORIGINS.includes(normalizedOrigin)
+    || LOCALHOST_ORIGIN_RE.test(normalizedOrigin)
   ) {
-    return origin;
+    return normalizedOrigin;
   }
   return "";
 }
