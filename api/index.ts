@@ -83,6 +83,60 @@ const DEFAULT_HEADERS = {
   Referer: "https://09.shinigami.asia/",
 };
 
+const PROVIDER_HEALTH_TTL = 60_000;
+let providerHealthCache: { value: unknown; expiresAt: number } | null = null;
+
+async function checkProviderOnline(id: string, url: string, accept = "application/json") {
+  const startedAt = Date.now();
+  try {
+    const res = await request(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": accept,
+        "Accept-Language": "id-ID,id;q=0.9",
+      },
+    } as any);
+
+    const statusCode = res.statusCode || 0;
+    const online = statusCode >= 200 && statusCode < 500;
+    return {
+      id,
+      online,
+      statusCode,
+      responseMs: Date.now() - startedAt,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch {
+    return {
+      id,
+      online: false,
+      statusCode: 0,
+      responseMs: Date.now() - startedAt,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+}
+
+async function getProviderHealthStatus() {
+  const now = Date.now();
+  if (providerHealthCache && providerHealthCache.expiresAt > now) {
+    return providerHealthCache.value;
+  }
+
+  const status = await Promise.all([
+    checkProviderOnline("shinigami", `${API_BASE}/genre/list`, "application/json"),
+    checkProviderOnline("komiku", `${KOMIKU_API}/?post_type=manga&s=one`, "text/html,application/xhtml+xml"),
+    checkProviderOnline("komikindo", "https://komikindo.ch/", "text/html,application/xhtml+xml"),
+  ]);
+
+  providerHealthCache = {
+    value: status,
+    expiresAt: now + PROVIDER_HEALTH_TTL,
+  };
+
+  return status;
+}
+
 const upstreamCache = new Map<string, { value: unknown; expiresAt: number }>();
 const upstreamInflight = new Map<string, Promise<unknown>>();
 
@@ -453,11 +507,14 @@ const shinigamiHandlers: Record<string, (query: any, slug?: string) => Promise<a
     return apiResponse(transformGenres(result.data || []));
   },
 
-  health: async () => ({
-    status: "ok",
-    providers: ["shinigami", "komiku"],
-    timestamp: new Date().toISOString(),
-  }),
+  health: async () => {
+    const providersStatus = await getProviderHealthStatus();
+    return {
+      status: "ok",
+      providers: providersStatus,
+      timestamp: new Date().toISOString(),
+    };
+  },
 };
 
 // ─── Komiku Provider (komiku.org) ───
