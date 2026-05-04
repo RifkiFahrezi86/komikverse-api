@@ -306,6 +306,415 @@ async function getGenreList() {
   return fetchWithRetry(`${API_BASE}/genre/list`);
 }
 
+const MANGADEX_API = "https://api.mangadex.org";
+const MANGADEX_COVERS_BASE = "https://uploads.mangadex.org/covers";
+const MANGADEX_ROUTE_PROVIDER = "mangadex";
+const MANGADEX_WEBTOON_ORIGINAL_LANGUAGES = ["ko"] as const;
+const MANGADEX_WEBTOON_TRANSLATED_LANGUAGES = ["id", "en"] as const;
+const MANGADEX_SAFE_CONTENT_RATINGS = ["safe", "suggestive"] as const;
+const MANGADEX_MAX_WEBTOON_LIMIT = 24;
+const MANGADEX_DETAIL_CHAPTER_LIMIT = 100;
+const MANGADEX_DETAIL_FEED_PAGES = 3;
+
+const MANGADEX_WEBTOON_THEMES = {
+  romance: {
+    tags: ["Romance", "Fantasy"],
+    includedTagsMode: "OR",
+    demographics: ["shoujo", "josei"],
+    keywords: [] as string[],
+  },
+  kerajaan: {
+    tags: ["Romance", "Historical", "Fantasy", "Reincarnation"],
+    includedTagsMode: "OR",
+    demographics: ["shoujo", "josei"],
+    keywords: [
+      "princess",
+      "prince",
+      "duke",
+      "duchess",
+      "villainess",
+      "empress",
+      "emperor",
+      "palace",
+      "royal",
+      "noble",
+      "historical",
+      "lady",
+      "countess",
+      "kingdom",
+    ],
+  },
+} as const;
+
+type MangadexWebtoonTheme = keyof typeof MANGADEX_WEBTOON_THEMES;
+
+function getMangadexCacheTtl(requestUrl: string): number {
+  const normalized = requestUrl.toLowerCase();
+  if (normalized.includes("/manga/tag")) return 12 * 60 * 60 * 1000;
+  if (normalized.includes("/at-home/server/")) return 2 * 60 * 60 * 1000;
+  if (normalized.includes("/feed?")) return 60 * 60 * 1000;
+  if (/\/manga\/[0-9a-f-]+\?/.test(normalized)) return 60 * 60 * 1000;
+  if (normalized.includes("title=")) return 10 * 60 * 1000;
+  return 30 * 60 * 1000;
+}
+
+async function fetchMangadexJson<T>(path: string, query?: URLSearchParams): Promise<T> {
+  const requestUrl = `${MANGADEX_API}${path}${query && query.toString() ? `?${query.toString()}` : ""}`;
+  return getCachedUpstream(`mangadex:${requestUrl}`, getMangadexCacheTtl(requestUrl), async () => {
+    const { statusCode, body, headers } = await request(requestUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "application/json",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+      },
+      maxRedirections: 0,
+    } as any);
+
+    const contentType = String(headers["content-type"] || "").toLowerCase();
+    const text = await body.text();
+
+    if (statusCode !== 200) {
+      throw new Error(`MangaDex upstream error ${statusCode}`);
+    }
+
+    if (!contentType.includes("application/json")) {
+      throw new Error("MangaDex upstream returned non-JSON content");
+    }
+
+    return JSON.parse(text) as T;
+  });
+}
+
+function pickMangadexText(value: Record<string, string> | undefined): string {
+  if (!value || typeof value !== "object") return "";
+  return value.id || value.en || value["ja-ro"] || value.ja || Object.values(value)[0] || "";
+}
+
+function normalizeMangadexText(value: string): string {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function slugifyMangadexTag(value: string): string {
+  return normalizeMangadexText(value).replace(/\s+/g, "-");
+}
+
+function resolveMangadexTheme(value: string | undefined): MangadexWebtoonTheme {
+  return value === "kerajaan" ? "kerajaan" : "romance";
+}
+
+function mapMangadexType(language: string | undefined): string {
+  const normalized = String(language || "").toLowerCase();
+  if (normalized === "ko") return "Manhwa";
+  if (normalized.startsWith("zh")) return "Manhua";
+  return "Manga";
+}
+
+function mapMangadexStatus(status: string | undefined): string {
+  switch (status) {
+    case "completed":
+      return "Completed";
+    case "ongoing":
+      return "Ongoing";
+    case "hiatus":
+      return "Hiatus";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Unknown";
+  }
+}
+
+function getMangadexRelationshipAttributes(relationships: any[], type: string): any[] {
+  return (relationships || [])
+    .filter((relationship) => relationship?.type === type && relationship?.attributes)
+    .map((relationship) => relationship.attributes);
+}
+
+function getMangadexCoverUrl(mangaId: string, relationships: any[], variant: "thumb" | "full" = "thumb"): string {
+  const coverArt = (relationships || []).find((relationship) => relationship?.type === "cover_art");
+  const fileName = coverArt?.attributes?.fileName;
+  if (!fileName) return "";
+  if (variant === "full") return `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}`;
+  return `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}.256.jpg`;
+}
+
+function getMangadexTagNames(tags: any[]): string[] {
+  return (tags || [])
+    .map((tag) => pickMangadexText(tag?.attributes?.name))
+    .filter(Boolean);
+}
+
+async function getMangadexTagMap(): Promise<Map<string, string>> {
+  const result = await fetchMangadexJson<any>("/manga/tag");
+  const map = new Map<string, string>();
+  for (const tag of result?.data || []) {
+    const name = normalizeMangadexText(pickMangadexText(tag?.attributes?.name));
+    if (name && typeof tag?.id === "string") {
+      map.set(name, tag.id);
+    }
+  }
+  return map;
+}
+
+async function resolveMangadexTagIds(names: readonly string[]): Promise<string[]> {
+  if (names.length === 0) return [];
+  const map = await getMangadexTagMap();
+  return names
+    .map((name) => map.get(normalizeMangadexText(name)) || "")
+    .filter(Boolean);
+}
+
+function getMangadexWebtoonScore(raw: any, theme: MangadexWebtoonTheme): number {
+  if (theme !== "kerajaan") return 0;
+
+  const attrs = raw?.attributes || {};
+  const text = normalizeMangadexText([
+    pickMangadexText(attrs.title),
+    pickMangadexText(attrs.description),
+    ...getMangadexTagNames(attrs.tags || []),
+  ].join(" "));
+  const padded = ` ${text} `;
+
+  let score = 0;
+  for (const keyword of MANGADEX_WEBTOON_THEMES.kerajaan.keywords) {
+    if (padded.includes(` ${keyword} `)) score += 3;
+  }
+  if (padded.includes(" romance ")) score += 4;
+  if (padded.includes(" historical ")) score += 5;
+  if (padded.includes(" fantasy ")) score += 2;
+  if (String(attrs.originalLanguage || "").toLowerCase() === "ko") score += 2;
+
+  return score;
+}
+
+function transformMangadexComic(raw: any): any {
+  const attrs = raw?.attributes || {};
+  const relationships = raw?.relationships || [];
+  const genreNames = getMangadexTagNames(attrs.tags || []);
+  const authors = getMangadexRelationshipAttributes(relationships, "author")
+    .map((author) => author?.name)
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    title: pickMangadexText(attrs.title),
+    thumbnail: getMangadexCoverUrl(raw.id, relationships, "thumb"),
+    image: getMangadexCoverUrl(raw.id, relationships, "full") || getMangadexCoverUrl(raw.id, relationships, "thumb"),
+    href: `/manga/${raw.id}`,
+    type: mapMangadexType(attrs.originalLanguage),
+    chapter: attrs.lastChapter ? `Chapter ${attrs.lastChapter}` : undefined,
+    description: pickMangadexText(attrs.description),
+    genre: genreNames.join(", "),
+    status: mapMangadexStatus(attrs.status),
+    author: authors || undefined,
+  };
+}
+
+function transformMangadexChapters(rawChapters: any[]): any[] {
+  const chapterMap = new Map<string, { chapter: any; language: string; publishedAt: number }>();
+
+  for (const raw of rawChapters || []) {
+    const attrs = raw?.attributes || {};
+    const parsedChapterNumber = typeof attrs.chapter === "string" ? Number(attrs.chapter) : NaN;
+    const chapterNumber = Number.isFinite(parsedChapterNumber) ? parsedChapterNumber : undefined;
+    const key = typeof chapterNumber === "number" ? chapterNumber.toFixed(3) : raw?.id;
+    if (!key) continue;
+
+    const translatedLanguage = String(attrs.translatedLanguage || "").toLowerCase();
+    const candidate = {
+      title: attrs.title
+        ? `Chapter ${attrs.chapter || ""} - ${attrs.title}`.trim()
+        : `Chapter ${attrs.chapter || ""}`.trim(),
+      href: `/chapter/${raw.id}`,
+      date: attrs.publishAt || attrs.readableAt || attrs.createdAt || undefined,
+      number: chapterNumber,
+      provider: MANGADEX_ROUTE_PROVIDER,
+    };
+
+    const publishedAt = Date.parse(attrs.publishAt || attrs.readableAt || attrs.createdAt || "") || 0;
+    const existing = chapterMap.get(key);
+
+    const shouldReplace = !existing
+      || (translatedLanguage === "id" && existing.language !== "id")
+      || (translatedLanguage === existing.language && publishedAt > existing.publishedAt);
+
+    if (shouldReplace) {
+      chapterMap.set(key, { chapter: candidate, language: translatedLanguage, publishedAt });
+    }
+  }
+
+  return Array.from(chapterMap.values())
+    .map((entry) => entry.chapter)
+    .sort((left, right) => {
+      const leftNumber = typeof left.number === "number" ? left.number : 0;
+      const rightNumber = typeof right.number === "number" ? right.number : 0;
+      if (rightNumber !== leftNumber) return rightNumber - leftNumber;
+      return Date.parse(String(right.date || "")) - Date.parse(String(left.date || ""));
+    });
+}
+
+async function fetchMangadexFeed(mangaId: string): Promise<any[]> {
+  const chapters: any[] = [];
+
+  for (let pageIndex = 0; pageIndex < MANGADEX_DETAIL_FEED_PAGES; pageIndex += 1) {
+    const offset = pageIndex * MANGADEX_DETAIL_CHAPTER_LIMIT;
+    const query = new URLSearchParams({
+      limit: String(MANGADEX_DETAIL_CHAPTER_LIMIT),
+      offset: String(offset),
+      "order[chapter]": "desc",
+      "order[volume]": "desc",
+      includes: "scanlation_group",
+    });
+    for (const language of MANGADEX_WEBTOON_TRANSLATED_LANGUAGES) {
+      query.append("translatedLanguage[]", language);
+    }
+
+    const result = await fetchMangadexJson<any>(`/manga/${encodeURIComponent(mangaId)}/feed`, query);
+    const items = Array.isArray(result?.data) ? result.data : [];
+    chapters.push(...items);
+
+    const total = typeof result?.total === "number" ? result.total : items.length;
+    const limit = typeof result?.limit === "number" ? result.limit : MANGADEX_DETAIL_CHAPTER_LIMIT;
+    if (offset + limit >= total) break;
+  }
+
+  return chapters;
+}
+
+async function fetchMangadexWebtoonList(query: any): Promise<any> {
+  const page = Math.max(1, parseInt(query.page) || 1);
+  const limit = Math.min(MANGADEX_MAX_WEBTOON_LIMIT, Math.max(1, parseInt(query.limit) || MANGADEX_MAX_WEBTOON_LIMIT));
+  const keyword = typeof query.keyword === "string" ? query.keyword.trim() : "";
+  const theme = resolveMangadexTheme(typeof query.theme === "string" ? query.theme.toLowerCase() : undefined);
+  const themeConfig = MANGADEX_WEBTOON_THEMES[theme];
+
+  const requestQuery = new URLSearchParams({
+    limit: String(limit),
+    offset: String((page - 1) * limit),
+    "order[followedCount]": "desc",
+    "order[latestUploadedChapter]": "desc",
+  });
+
+  if (keyword) requestQuery.set("title", keyword);
+  requestQuery.append("includes[]", "cover_art");
+
+  for (const language of MANGADEX_WEBTOON_TRANSLATED_LANGUAGES) {
+    requestQuery.append("availableTranslatedLanguage[]", language);
+  }
+  for (const language of MANGADEX_WEBTOON_ORIGINAL_LANGUAGES) {
+    requestQuery.append("originalLanguage[]", language);
+  }
+  for (const rating of MANGADEX_SAFE_CONTENT_RATINGS) {
+    requestQuery.append("contentRating[]", rating);
+  }
+  for (const demographic of themeConfig.demographics) {
+    requestQuery.append("publicationDemographic[]", demographic);
+  }
+
+  const tagIds = await resolveMangadexTagIds(themeConfig.tags);
+  for (const tagId of tagIds) {
+    requestQuery.append("includedTags[]", tagId);
+  }
+  if (tagIds.length > 0) {
+    requestQuery.set("includedTagsMode", themeConfig.includedTagsMode);
+  }
+
+  const result = await fetchMangadexJson<any>("/manga", requestQuery);
+  let items = Array.isArray(result?.data) ? result.data : [];
+
+  if (theme === "kerajaan") {
+    items = items
+      .map((item: any) => ({ item, score: getMangadexWebtoonScore(item, theme) }))
+      .filter((entry: { item: any; score: number }) => entry.score > 0)
+      .sort((left: { item: any; score: number }, right: { item: any; score: number }) => right.score - left.score)
+      .map((entry: { item: any; score: number }) => entry.item);
+  }
+
+  const total = typeof result?.total === "number" ? result.total : items.length;
+  const offset = typeof result?.offset === "number" ? result.offset : (page - 1) * limit;
+  const responseLimit = typeof result?.limit === "number" ? result.limit : limit;
+
+  return apiResponse(items.map(transformMangadexComic), {
+    current_page: page,
+    length_page: Math.max(1, Math.ceil(total / Math.max(responseLimit, 1))),
+    has_next: offset + responseLimit < total,
+    has_prev: page > 1,
+  });
+}
+
+async function fetchMangadexWebtoonDetail(mangaId: string): Promise<any> {
+  const detailQuery = new URLSearchParams();
+  detailQuery.append("includes[]", "cover_art");
+  detailQuery.append("includes[]", "author");
+  detailQuery.append("includes[]", "artist");
+
+  const [detailResult, feedResult] = await Promise.all([
+    fetchMangadexJson<any>(`/manga/${encodeURIComponent(mangaId)}`, detailQuery),
+    fetchMangadexFeed(mangaId),
+  ]);
+
+  const manga = detailResult?.data;
+  if (!manga?.id) return apiError("Webtoon tidak ditemukan", 404);
+
+  const attrs = manga.attributes || {};
+  const relationships = manga.relationships || [];
+  const genreNames = getMangadexTagNames(attrs.tags || []);
+  const authors = getMangadexRelationshipAttributes(relationships, "author")
+    .map((author) => author?.name)
+    .filter(Boolean)
+    .join(", ");
+  const artists = getMangadexRelationshipAttributes(relationships, "artist")
+    .map((artist) => artist?.name)
+    .filter(Boolean)
+    .join(", ");
+
+  const alternativeTitles = (attrs.altTitles || [])
+    .map((title: Record<string, string>) => pickMangadexText(title))
+    .filter(Boolean)
+    .join(", ");
+
+  return apiResponse({
+    title: pickMangadexText(attrs.title),
+    thumbnail: getMangadexCoverUrl(manga.id, relationships, "thumb"),
+    image: getMangadexCoverUrl(manga.id, relationships, "full") || getMangadexCoverUrl(manga.id, relationships, "thumb"),
+    description: pickMangadexText(attrs.description),
+    type: mapMangadexType(attrs.originalLanguage),
+    status: mapMangadexStatus(attrs.status),
+    author: authors || undefined,
+    artist: artists || undefined,
+    genre: genreNames.map((genre) => ({ title: genre, href: `/genre/${slugifyMangadexTag(genre)}` })),
+    chapters: transformMangadexChapters(feedResult),
+    alternative: alternativeTitles || undefined,
+    released: attrs.year ? String(attrs.year) : undefined,
+  });
+}
+
+async function fetchMangadexWebtoonChapter(chapterId: string): Promise<any> {
+  const chapterResult = await fetchMangadexJson<any>(`/chapter/${encodeURIComponent(chapterId)}`);
+  const chapterInfo = chapterResult?.data;
+  if (!chapterInfo?.id) return apiError("Chapter webtoon tidak ditemukan", 404);
+
+  const atHomeResult = await fetchMangadexJson<any>(`/at-home/server/${encodeURIComponent(chapterId)}`);
+  const chapter = atHomeResult?.chapter;
+  if (!chapter?.hash || !Array.isArray(chapter?.data)) {
+    return apiError("Gagal mengambil halaman webtoon", 502);
+  }
+
+  const chapterAttrs = chapterInfo.attributes || {};
+  const title = chapterAttrs.title
+    ? `Chapter ${chapterAttrs.chapter || ""} - ${chapterAttrs.title}`.trim()
+    : `Chapter ${chapterAttrs.chapter || ""}`.trim();
+  const baseUrl = String(atHomeResult?.baseUrl || "").replace(/\/$/, "");
+  const panel = chapter.data.map((file: string) => `${baseUrl}/data/${chapter.hash}/${file}`);
+
+  return apiResponse([{ title, panel }]);
+}
+
 // ─── Transformers ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getTypeFromCountry(c: string) {
@@ -460,6 +869,18 @@ function apiResponse(data: any, pagination?: any) {
 function apiError(message: string, code = 500) {
   return { status: "error", message, code };
 }
+
+const standaloneHandlers: Record<string, (query: any, slug?: string) => Promise<any>> = {
+  webtoon: async (query) => fetchMangadexWebtoonList(query),
+  webtoondetail: async (_query, slug) => {
+    if (!slug) return apiError("Slug required", 400);
+    return fetchMangadexWebtoonDetail(slug);
+  },
+  webtoonread: async (_query, slug) => {
+    if (!slug) return apiError("Slug required", 400);
+    return fetchMangadexWebtoonChapter(slug);
+  },
+};
 
 // ─── Route handlers ───
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1336,7 +1757,7 @@ function hashIP(ip: string): string {
 function trackRequest(req: VercelRequest, endpoint: string, provider: string) {
   if (!ENABLE_CONTENT_ANALYTICS) return;
   // Keep Komikindo scraper route stateless and avoid Neon compute writes.
-  if (provider === "komikindo") return;
+  if (provider === "komikindo" || provider === MANGADEX_ROUTE_PROVIDER) return;
   // Fire-and-forget: don't await, don't block response
   getAnalyticsDb().then(q => {
     if (!q) return;
@@ -1420,13 +1841,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Provider routing
-    const provider = (typeof req.query.provider === "string" ? req.query.provider : "shinigami").toLowerCase();
-    const providerHandlers = route === "health" ? shinigamiHandlers : providers[provider];
-    if (!providerHandlers) {
-      return res.status(400).json(apiError(`Unknown provider: ${provider}`, 400));
+    let analyticsProvider = (typeof req.query.provider === "string" ? req.query.provider : "shinigami").toLowerCase();
+    let handlerFn: ((query: any, slug?: string) => Promise<any>) | undefined;
+
+    if (route === "health") {
+      handlerFn = shinigamiHandlers.health;
+      analyticsProvider = "health";
+    } else if (standaloneHandlers[route]) {
+      handlerFn = standaloneHandlers[route];
+      analyticsProvider = MANGADEX_ROUTE_PROVIDER;
+    } else {
+      const provider = analyticsProvider;
+      const providerHandlers = providers[provider];
+      if (!providerHandlers) {
+        return res.status(400).json(apiError(`Unknown provider: ${provider}`, 400));
+      }
+      handlerFn = providerHandlers[route];
     }
-    const handlerFn = providerHandlers[route];
+
     if (!handlerFn) {
       return res.status(404).json(apiError("Endpoint not found", 404));
     }
@@ -1435,7 +1867,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const statusCode = result.code && result.status === "error" ? result.code : 200;
 
     // Track request (fire-and-forget, non-blocking)
-    trackRequest(req, `/${route}${slug ? "/" + slug : ""}`, provider);
+    if (analyticsProvider !== "health") {
+      trackRequest(req, `/${route}${slug ? "/" + slug : ""}`, analyticsProvider);
+    }
 
     // Route-specific cache control to minimize edge requests
     const cacheMap: Record<string, string> = {
@@ -1457,7 +1891,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       read:        "public, s-maxage=1800, stale-while-revalidate=7200", // 30 min + 2 hr stale
       health:      "no-cache",
     };
-    const activeCacheMap = provider === "komikindo" ? komikindoCacheMap : cacheMap;
+    const mangadexCacheMap: Record<string, string> = {
+      webtoon:       "public, s-maxage=1800, stale-while-revalidate=14400",     // 30 min + 4 hr stale
+      webtoondetail: "public, s-maxage=3600, stale-while-revalidate=21600",     // 1 hr + 6 hr stale
+      webtoonread:   "public, s-maxage=3600, stale-while-revalidate=21600",     // 1 hr + 6 hr stale
+    };
+    const activeCacheMap = analyticsProvider === "komikindo"
+      ? komikindoCacheMap
+      : analyticsProvider === MANGADEX_ROUTE_PROVIDER
+        ? mangadexCacheMap
+        : cacheMap;
     res.setHeader("Cache-Control", activeCacheMap[route] || "public, s-maxage=120, stale-while-revalidate=300");
 
     return res.status(statusCode).json(result);
