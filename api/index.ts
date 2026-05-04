@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { request } from "undici";
 import crypto from "crypto";
+import https from "https";
 import * as cheerio from "cheerio";
 
 // ─── Security Config ───
@@ -462,29 +463,65 @@ function buildMangadexCoverProxyPath(mangaId: string, fileName: string, variant:
   return `/api/webtooncover?${query.toString()}`;
 }
 
+async function fetchBinaryImage(url: string, redirectCount = 0): Promise<{ buffer: Buffer; contentType: string }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const requestHandle = https.request({
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      port: parsed.port || undefined,
+      path: `${parsed.pathname}${parsed.search}`,
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      },
+      rejectUnauthorized: false,
+    }, (response) => {
+      const statusCode = response.statusCode || 0;
+      const location = typeof response.headers.location === "string" ? response.headers.location : "";
+
+      if (location && statusCode >= 300 && statusCode < 400 && redirectCount < 2) {
+        response.resume();
+        fetchBinaryImage(new URL(location, url).toString(), redirectCount + 1).then(resolve).catch(reject);
+        return;
+      }
+
+      if (statusCode < 200 || statusCode >= 300) {
+        response.resume();
+        reject(new Error(`Image upstream error ${statusCode}`));
+        return;
+      }
+
+      const contentType = String(response.headers["content-type"] || "").toLowerCase();
+      const chunks: Buffer[] = [];
+
+      response.on("data", (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      response.on("end", () => {
+        const buffer = Buffer.concat(chunks);
+        if (!contentType.startsWith("image/") || buffer.length === 0) {
+          reject(new Error("Image upstream returned non-image content"));
+          return;
+        }
+        resolve({ buffer, contentType });
+      });
+      response.on("error", reject);
+    });
+
+    requestHandle.on("error", reject);
+    requestHandle.end();
+  });
+}
+
 async function fetchMangadexCoverAsset(mangaId: string, fileName: string, variant: "thumb" | "full" = "thumb") {
   const directUrl = buildMangadexRawCoverUrl(mangaId, fileName, variant);
   const fallbackUrl = proxyMangadexAssetUrl(directUrl, variant === "thumb" ? 256 : undefined);
 
   for (const candidate of [directUrl, fallbackUrl]) {
     try {
-      const { statusCode, body, headers } = await request(candidate, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        },
-        maxRedirections: 2,
-      } as any);
-
-      if (statusCode < 200 || statusCode >= 300) continue;
-
-      const contentType = String(headers["content-type"] || "").toLowerCase();
-      if (!contentType.startsWith("image/")) continue;
-
-      const buffer = Buffer.from(await body.arrayBuffer());
-      if (buffer.length === 0) continue;
-
-      return { buffer, contentType };
+      return await fetchBinaryImage(candidate);
     } catch {
       continue;
     }
