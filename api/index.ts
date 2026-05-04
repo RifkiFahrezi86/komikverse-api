@@ -357,7 +357,7 @@ function getMangadexCacheTtl(requestUrl: string): number {
   if (normalized.includes("/at-home/server/")) return 2 * 60 * 60 * 1000;
   if (normalized.includes("/feed?")) return 60 * 60 * 1000;
   if (/\/manga\/[0-9a-f-]+\?/.test(normalized)) return 60 * 60 * 1000;
-  if (normalized.includes("title=")) return 10 * 60 * 1000;
+  if (normalized.includes("title=")) return 60 * 60 * 1000;
   return 30 * 60 * 1000;
 }
 
@@ -2144,12 +2144,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       webtoondetail: "public, s-maxage=3600, stale-while-revalidate=21600",     // 1 hr + 6 hr stale
       webtoonread:   "public, s-maxage=3600, stale-while-revalidate=21600",     // 1 hr + 6 hr stale
     };
+    const mangadexKeywordCacheControl = route === "webtoon"
+      && typeof req.query.keyword === "string"
+      && req.query.keyword.trim()
+      ? "public, s-maxage=3600, stale-while-revalidate=86400"
+      : null;
     const activeCacheMap = analyticsProvider === "komikindo"
       ? komikindoCacheMap
       : analyticsProvider === MANGADEX_ROUTE_PROVIDER
         ? mangadexCacheMap
         : cacheMap;
-    res.setHeader("Cache-Control", activeCacheMap[route] || "public, s-maxage=120, stale-while-revalidate=300");
+    res.setHeader(
+      "Cache-Control",
+      mangadexKeywordCacheControl || activeCacheMap[route] || "public, s-maxage=120, stale-while-revalidate=300"
+    );
 
     return res.status(statusCode).json(result);
   } catch (error) {
