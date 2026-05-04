@@ -311,7 +311,7 @@ const MANGADEX_API = "https://api.mangadex.org";
 const MANGADEX_COVERS_BASE = "https://uploads.mangadex.org/covers";
 const MANGADEX_ROUTE_PROVIDER = "mangadex";
 const MANGADEX_WEBTOON_ORIGINAL_LANGUAGES = ["ko"] as const;
-const MANGADEX_WEBTOON_TRANSLATED_LANGUAGES = ["id", "en"] as const;
+const MANGADEX_WEBTOON_TRANSLATED_LANGUAGES = ["id"] as const;
 const MANGADEX_SAFE_CONTENT_RATINGS = ["safe", "suggestive"] as const;
 const MANGADEX_MAX_WEBTOON_LIMIT = 24;
 const MANGADEX_DETAIL_CHAPTER_LIMIT = 100;
@@ -812,6 +812,11 @@ async function fetchMangadexWebtoonChapter(chapterId: string): Promise<any> {
   const chapterResult = await fetchMangadexJson<any>(`/chapter/${encodeURIComponent(chapterId)}`);
   const chapterInfo = chapterResult?.data;
   if (!chapterInfo?.id) return apiError("Chapter webtoon tidak ditemukan", 404);
+
+  const translatedLanguage = String(chapterInfo?.attributes?.translatedLanguage || "").toLowerCase();
+  if (!MANGADEX_WEBTOON_TRANSLATED_LANGUAGES.includes(translatedLanguage as (typeof MANGADEX_WEBTOON_TRANSLATED_LANGUAGES)[number])) {
+    return apiError("Chapter webtoon sub Indo tidak tersedia", 404);
+  }
 
   const atHomeResult = await fetchMangadexJson<any>(`/at-home/server/${encodeURIComponent(chapterId)}`);
   const chapter = atHomeResult?.chapter;
