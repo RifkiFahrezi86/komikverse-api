@@ -435,6 +435,12 @@ function getMangadexRelationshipAttributes(relationships: any[], type: string): 
     .map((relationship) => relationship.attributes);
 }
 
+function buildMangadexRawCoverUrl(mangaId: string, fileName: string, variant: "thumb" | "full" = "thumb"): string {
+  return variant === "full"
+    ? `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}`
+    : `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}.256.jpg`;
+}
+
 function proxyMangadexAssetUrl(url: string, width?: number): string {
   if (!url) return "";
   if (url.includes("wsrv.nl/?")) return url;
@@ -451,15 +457,47 @@ function proxyMangadexAssetUrl(url: string, width?: number): string {
   return `https://wsrv.nl/?${query.toString()}`;
 }
 
+function buildMangadexCoverProxyPath(mangaId: string, fileName: string, variant: "thumb" | "full" = "thumb"): string {
+  const query = new URLSearchParams({ mangaId, fileName, variant });
+  return `/api/webtooncover?${query.toString()}`;
+}
+
+async function fetchMangadexCoverAsset(mangaId: string, fileName: string, variant: "thumb" | "full" = "thumb") {
+  const directUrl = buildMangadexRawCoverUrl(mangaId, fileName, variant);
+  const fallbackUrl = proxyMangadexAssetUrl(directUrl, variant === "thumb" ? 256 : undefined);
+
+  for (const candidate of [directUrl, fallbackUrl]) {
+    try {
+      const { statusCode, body, headers } = await request(candidate, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        },
+        maxRedirections: 2,
+      } as any);
+
+      if (statusCode < 200 || statusCode >= 300) continue;
+
+      const contentType = String(headers["content-type"] || "").toLowerCase();
+      if (!contentType.startsWith("image/")) continue;
+
+      const buffer = Buffer.from(await body.arrayBuffer());
+      if (buffer.length === 0) continue;
+
+      return { buffer, contentType };
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error("MangaDex cover unavailable");
+}
+
 function getMangadexCoverUrl(mangaId: string, relationships: any[], variant: "thumb" | "full" = "thumb"): string {
   const coverArt = (relationships || []).find((relationship) => relationship?.type === "cover_art");
   const fileName = coverArt?.attributes?.fileName;
   if (!fileName) return "";
-  const rawUrl = variant === "full"
-    ? `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}`
-    : `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}.256.jpg`;
-
-  return proxyMangadexAssetUrl(rawUrl, variant === "thumb" ? 256 : undefined);
+  return buildMangadexCoverProxyPath(mangaId, fileName, variant);
 }
 
 function getMangadexTagNames(tags: any[]): string[] {
@@ -1863,6 +1901,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (typeof v === "string" && !isSafeInput(v)) {
         return res.status(400).json(apiError("Invalid input detected", 400));
       }
+    }
+
+    if (route === "webtooncover") {
+      const mangaId = typeof req.query.mangaId === "string" ? sanitizeSlug(req.query.mangaId) : "";
+      const fileName = typeof req.query.fileName === "string" ? sanitizeSlug(req.query.fileName) : "";
+      const variant = req.query.variant === "thumb" ? "thumb" : "full";
+
+      if (!mangaId || !fileName) {
+        return res.status(400).json(apiError("Parameter cover tidak valid", 400));
+      }
+
+      const cover = await fetchMangadexCoverAsset(mangaId, fileName, variant);
+      res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
+      res.setHeader("Content-Type", cover.contentType);
+      return res.status(200).send(cover.buffer);
     }
 
     let analyticsProvider = (typeof req.query.provider === "string" ? req.query.provider : "shinigami").toLowerCase();
