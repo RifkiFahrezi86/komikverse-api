@@ -314,7 +314,7 @@ const MANGADEX_WEBTOON_TRANSLATED_LANGUAGES = ["id", "en"] as const;
 const MANGADEX_SAFE_CONTENT_RATINGS = ["safe", "suggestive"] as const;
 const MANGADEX_MAX_WEBTOON_LIMIT = 24;
 const MANGADEX_DETAIL_CHAPTER_LIMIT = 100;
-const MANGADEX_DETAIL_FEED_PAGES = 3;
+const MANGADEX_DETAIL_FEED_PAGES = 1;
 
 const MANGADEX_WEBTOON_THEMES = {
   romance: {
@@ -568,8 +568,8 @@ async function fetchMangadexFeed(mangaId: string): Promise<any[]> {
       offset: String(offset),
       "order[chapter]": "desc",
       "order[volume]": "desc",
-      includes: "scanlation_group",
     });
+    query.append("includes[]", "scanlation_group");
     for (const language of MANGADEX_WEBTOON_TRANSLATED_LANGUAGES) {
       query.append("translatedLanguage[]", language);
     }
@@ -653,10 +653,8 @@ async function fetchMangadexWebtoonDetail(mangaId: string): Promise<any> {
   detailQuery.append("includes[]", "author");
   detailQuery.append("includes[]", "artist");
 
-  const [detailResult, feedResult] = await Promise.all([
-    fetchMangadexJson<any>(`/manga/${encodeURIComponent(mangaId)}`, detailQuery),
-    fetchMangadexFeed(mangaId),
-  ]);
+  const detailResult = await fetchMangadexJson<any>(`/manga/${encodeURIComponent(mangaId)}`, detailQuery);
+  const feedResult = await fetchMangadexFeed(mangaId).catch(() => []);
 
   const manga = detailResult?.data;
   if (!manga?.id) return apiError("Webtoon tidak ditemukan", 404);
