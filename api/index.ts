@@ -318,10 +318,10 @@ const MANGADEX_DETAIL_CHAPTER_LIMIT = 100;
 const MANGADEX_DETAIL_FEED_PAGES = 1;
 
 const MANGADEX_WEBTOON_THEMES = {
-  romance: {
-    tags: ["Romance", "Fantasy"],
+  all: {
+    tags: ["Long Strip", "Web Comic"],
     includedTagsMode: "OR",
-    demographics: ["shoujo", "josei"],
+    demographics: [] as string[],
     keywords: [] as string[],
   },
   kerajaan: {
@@ -405,7 +405,7 @@ function slugifyMangadexTag(value: string): string {
 }
 
 function resolveMangadexTheme(value: string | undefined): MangadexWebtoonTheme {
-  return value === "kerajaan" ? "kerajaan" : "romance";
+  return value === "kerajaan" ? "kerajaan" : "all";
 }
 
 function mapMangadexType(language: string | undefined): string {
@@ -461,6 +461,16 @@ function proxyMangadexAssetUrl(url: string, width?: number): string {
 function buildMangadexCoverProxyPath(mangaId: string, fileName: string, variant: "thumb" | "full" = "thumb"): string {
   const query = new URLSearchParams({ mangaId, fileName, variant });
   return `/api/webtooncover?${query.toString()}`;
+}
+
+function buildMangadexPanelProxyPath(hash: string, fileName: string, quality: "data" | "data-saver" = "data"): string {
+  const query = new URLSearchParams({ hash, fileName, quality });
+  return `/api/webtoonpanel?${query.toString()}`;
+}
+
+function buildMangadexRawPanelUrl(hash: string, fileName: string, quality: "data" | "data-saver" = "data"): string {
+  const normalizedQuality = quality === "data-saver" ? "data-saver" : "data";
+  return `https://uploads.mangadex.org/${normalizedQuality}/${hash}/${fileName}`;
 }
 
 async function fetchBinaryImage(url: string, redirectCount = 0): Promise<{ buffer: Buffer; contentType: string }> {
@@ -528,6 +538,11 @@ async function fetchMangadexCoverAsset(mangaId: string, fileName: string, varian
   }
 
   throw new Error("MangaDex cover unavailable");
+}
+
+async function fetchMangadexPanelAsset(hash: string, fileName: string, quality: "data" | "data-saver" = "data") {
+  const panelUrl = buildMangadexRawPanelUrl(hash, fileName, quality);
+  return fetchBinaryImage(panelUrl);
 }
 
 function getMangadexCoverUrl(mangaId: string, relationships: any[], variant: "thumb" | "full" = "thumb"): string {
@@ -808,8 +823,7 @@ async function fetchMangadexWebtoonChapter(chapterId: string): Promise<any> {
   const title = chapterAttrs.title
     ? `Chapter ${chapterAttrs.chapter || ""} - ${chapterAttrs.title}`.trim()
     : `Chapter ${chapterAttrs.chapter || ""}`.trim();
-  const baseUrl = String(atHomeResult?.baseUrl || "").replace(/\/$/, "");
-  const panel = chapter.data.map((file: string) => `${baseUrl}/data/${chapter.hash}/${file}`);
+  const panel = chapter.data.map((file: string) => buildMangadexPanelProxyPath(chapter.hash, file, "data"));
 
   return apiResponse([{ title, panel }]);
 }
@@ -1953,6 +1967,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
       res.setHeader("Content-Type", cover.contentType);
       return res.status(200).send(cover.buffer);
+    }
+
+    if (route === "webtoonpanel") {
+      const hash = typeof req.query.hash === "string" ? sanitizeSlug(req.query.hash) : "";
+      const fileName = typeof req.query.fileName === "string" ? sanitizeSlug(req.query.fileName) : "";
+      const quality = req.query.quality === "data-saver" ? "data-saver" : "data";
+
+      if (!hash || !fileName) {
+        return res.status(400).json(apiError("Parameter panel tidak valid", 400));
+      }
+
+      const panel = await fetchMangadexPanelAsset(hash, fileName, quality);
+      res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
+      res.setHeader("Content-Type", panel.contentType);
+      return res.status(200).send(panel.buffer);
     }
 
     let analyticsProvider = (typeof req.query.provider === "string" ? req.query.provider : "shinigami").toLowerCase();
