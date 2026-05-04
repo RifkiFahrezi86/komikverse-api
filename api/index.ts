@@ -314,6 +314,8 @@ const MANGADEX_WEBTOON_ORIGINAL_LANGUAGES = ["ko"] as const;
 const MANGADEX_WEBTOON_TRANSLATED_LANGUAGES = ["id"] as const;
 const MANGADEX_SAFE_CONTENT_RATINGS = ["safe", "suggestive"] as const;
 const MANGADEX_MAX_WEBTOON_LIMIT = 24;
+const MANGADEX_WEBTOON_SCAN_MULTIPLIER = 4;
+const MANGADEX_WEBTOON_MAX_SCAN_BATCHES = 6;
 const MANGADEX_DETAIL_CHAPTER_LIMIT = 100;
 const MANGADEX_DETAIL_FEED_PAGES = 1;
 
@@ -695,6 +697,71 @@ async function fetchMangadexFeed(mangaId: string): Promise<any[]> {
   return chapters;
 }
 
+async function hasMangadexTranslatedChapters(mangaId: string): Promise<boolean> {
+  const query = new URLSearchParams({
+    limit: "1",
+    offset: "0",
+    "order[chapter]": "desc",
+    "order[volume]": "desc",
+  });
+  query.append("includes[]", "scanlation_group");
+  for (const language of MANGADEX_WEBTOON_TRANSLATED_LANGUAGES) {
+    query.append("translatedLanguage[]", language);
+  }
+
+  const result = await fetchMangadexJson<any>(`/manga/${encodeURIComponent(mangaId)}/feed`, query);
+  return Array.isArray(result?.data) && result.data.length > 0;
+}
+
+function scoreMangadexWebtoonItems(items: any[], theme: MangadexWebtoonTheme): any[] {
+  if (theme !== "kerajaan") return items;
+
+  return items
+    .map((item: any) => ({ item, score: getMangadexWebtoonScore(item, theme) }))
+    .filter((entry: { item: any; score: number }) => entry.score > 0)
+    .sort((left: { item: any; score: number }, right: { item: any; score: number }) => right.score - left.score)
+    .map((entry: { item: any; score: number }) => entry.item);
+}
+
+function buildMangadexWebtoonListQuery(
+  limit: number,
+  offset: number,
+  keyword: string,
+  themeConfig: (typeof MANGADEX_WEBTOON_THEMES)[MangadexWebtoonTheme],
+  tagIds: string[]
+): URLSearchParams {
+  const requestQuery = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    "order[followedCount]": "desc",
+    "order[latestUploadedChapter]": "desc",
+  });
+
+  if (keyword) requestQuery.set("title", keyword);
+  requestQuery.append("includes[]", "cover_art");
+
+  for (const language of MANGADEX_WEBTOON_TRANSLATED_LANGUAGES) {
+    requestQuery.append("availableTranslatedLanguage[]", language);
+  }
+  for (const language of MANGADEX_WEBTOON_ORIGINAL_LANGUAGES) {
+    requestQuery.append("originalLanguage[]", language);
+  }
+  for (const rating of MANGADEX_SAFE_CONTENT_RATINGS) {
+    requestQuery.append("contentRating[]", rating);
+  }
+  for (const demographic of themeConfig.demographics) {
+    requestQuery.append("publicationDemographic[]", demographic);
+  }
+  for (const tagId of tagIds) {
+    requestQuery.append("includedTags[]", tagId);
+  }
+  if (tagIds.length > 0) {
+    requestQuery.set("includedTagsMode", themeConfig.includedTagsMode);
+  }
+
+  return requestQuery;
+}
+
 async function fetchMangadexMangaById(mangaId: string): Promise<any | null> {
   const query = new URLSearchParams({
     limit: "1",
@@ -715,57 +782,57 @@ async function fetchMangadexWebtoonList(query: any): Promise<any> {
   const keyword = typeof query.keyword === "string" ? query.keyword.trim() : "";
   const theme = resolveMangadexTheme(typeof query.theme === "string" ? query.theme.toLowerCase() : undefined);
   const themeConfig = MANGADEX_WEBTOON_THEMES[theme];
-
-  const requestQuery = new URLSearchParams({
-    limit: String(limit),
-    offset: String((page - 1) * limit),
-    "order[followedCount]": "desc",
-    "order[latestUploadedChapter]": "desc",
-  });
-
-  if (keyword) requestQuery.set("title", keyword);
-  requestQuery.append("includes[]", "cover_art");
-
-  for (const language of MANGADEX_WEBTOON_TRANSLATED_LANGUAGES) {
-    requestQuery.append("availableTranslatedLanguage[]", language);
-  }
-  for (const language of MANGADEX_WEBTOON_ORIGINAL_LANGUAGES) {
-    requestQuery.append("originalLanguage[]", language);
-  }
-  for (const rating of MANGADEX_SAFE_CONTENT_RATINGS) {
-    requestQuery.append("contentRating[]", rating);
-  }
-  for (const demographic of themeConfig.demographics) {
-    requestQuery.append("publicationDemographic[]", demographic);
-  }
-
   const tagIds = await resolveMangadexTagIds(themeConfig.tags);
-  for (const tagId of tagIds) {
-    requestQuery.append("includedTags[]", tagId);
-  }
-  if (tagIds.length > 0) {
-    requestQuery.set("includedTagsMode", themeConfig.includedTagsMode);
+  const requestedStartIndex = (page - 1) * limit;
+  const requestedEndIndex = requestedStartIndex + limit;
+  const sourceLimit = Math.max(limit, Math.min(96, limit * MANGADEX_WEBTOON_SCAN_MULTIPLIER));
+  const collected: any[] = [];
+  const seenIds = new Set<string>();
+  let sourceOffset = 0;
+  let sourceTotal = 0;
+  let sourceHasNext = true;
+
+  for (let batchIndex = 0; batchIndex < MANGADEX_WEBTOON_MAX_SCAN_BATCHES; batchIndex += 1) {
+    const requestQuery = buildMangadexWebtoonListQuery(sourceLimit, sourceOffset, keyword, themeConfig, tagIds);
+    const result = await fetchMangadexJson<any>("/manga", requestQuery);
+    const responseLimit = typeof result?.limit === "number" ? result.limit : sourceLimit;
+    const responseOffset = typeof result?.offset === "number" ? result.offset : sourceOffset;
+    sourceTotal = typeof result?.total === "number" ? result.total : 0;
+
+    const sourceItems = scoreMangadexWebtoonItems(Array.isArray(result?.data) ? result.data : [], theme);
+    if (sourceItems.length === 0) {
+      sourceHasNext = false;
+      break;
+    }
+
+    const chapterChecks = await Promise.all(sourceItems.map(async (item: any) => {
+      if (!item?.id || seenIds.has(item.id)) return null;
+      try {
+        return await hasMangadexTranslatedChapters(item.id) ? item : null;
+      } catch {
+        return null;
+      }
+    }));
+
+    for (const item of chapterChecks) {
+      if (!item?.id || seenIds.has(item.id)) continue;
+      seenIds.add(item.id);
+      collected.push(item);
+      if (collected.length > requestedEndIndex) break;
+    }
+
+    sourceOffset = responseOffset + responseLimit;
+    sourceHasNext = sourceOffset < sourceTotal;
+    if (collected.length > requestedEndIndex || !sourceHasNext) break;
   }
 
-  const result = await fetchMangadexJson<any>("/manga", requestQuery);
-  let items = Array.isArray(result?.data) ? result.data : [];
-
-  if (theme === "kerajaan") {
-    items = items
-      .map((item: any) => ({ item, score: getMangadexWebtoonScore(item, theme) }))
-      .filter((entry: { item: any; score: number }) => entry.score > 0)
-      .sort((left: { item: any; score: number }, right: { item: any; score: number }) => right.score - left.score)
-      .map((entry: { item: any; score: number }) => entry.item);
-  }
-
-  const total = typeof result?.total === "number" ? result.total : items.length;
-  const offset = typeof result?.offset === "number" ? result.offset : (page - 1) * limit;
-  const responseLimit = typeof result?.limit === "number" ? result.limit : limit;
+  const items = collected.slice(requestedStartIndex, requestedEndIndex);
+  const hasNext = collected.length > requestedEndIndex || sourceHasNext;
 
   return apiResponse(items.map(transformMangadexComic), {
     current_page: page,
-    length_page: Math.max(1, Math.ceil(total / Math.max(responseLimit, 1))),
-    has_next: offset + responseLimit < total,
+    length_page: hasNext ? page + 1 : page,
+    has_next: hasNext,
     has_prev: page > 1,
   });
 }
@@ -791,6 +858,11 @@ async function fetchMangadexWebtoonDetail(mangaId: string): Promise<any> {
     .map((title: Record<string, string>) => pickMangadexText(title))
     .filter(Boolean)
     .join(", ");
+  const chapters = transformMangadexChapters(feedResult);
+
+  if (chapters.length === 0) {
+    return apiError("Chapter webtoon sub Indo belum tersedia", 404);
+  }
 
   return apiResponse({
     title: pickMangadexText(attrs.title),
@@ -802,7 +874,7 @@ async function fetchMangadexWebtoonDetail(mangaId: string): Promise<any> {
     author: authors || undefined,
     artist: artists || undefined,
     genre: genreNames.map((genre) => ({ title: genre, href: `/genre/${slugifyMangadexTag(genre)}` })),
-    chapters: transformMangadexChapters(feedResult),
+    chapters,
     alternative: alternativeTitles || undefined,
     released: attrs.year ? String(attrs.year) : undefined,
   });
