@@ -435,12 +435,31 @@ function getMangadexRelationshipAttributes(relationships: any[], type: string): 
     .map((relationship) => relationship.attributes);
 }
 
+function proxyMangadexAssetUrl(url: string, width?: number): string {
+  if (!url) return "";
+  if (url.includes("wsrv.nl/?")) return url;
+
+  const query = new URLSearchParams({
+    url,
+    default: "1",
+  });
+
+  if (typeof width === "number" && width > 0) {
+    query.set("w", String(width));
+  }
+
+  return `https://wsrv.nl/?${query.toString()}`;
+}
+
 function getMangadexCoverUrl(mangaId: string, relationships: any[], variant: "thumb" | "full" = "thumb"): string {
   const coverArt = (relationships || []).find((relationship) => relationship?.type === "cover_art");
   const fileName = coverArt?.attributes?.fileName;
   if (!fileName) return "";
-  if (variant === "full") return `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}`;
-  return `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}.256.jpg`;
+  const rawUrl = variant === "full"
+    ? `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}`
+    : `${MANGADEX_COVERS_BASE}/${mangaId}/${fileName}.256.jpg`;
+
+  return proxyMangadexAssetUrl(rawUrl, variant === "thumb" ? 256 : undefined);
 }
 
 function getMangadexTagNames(tags: any[]): string[] {
