@@ -586,6 +586,20 @@ async function fetchMangadexFeed(mangaId: string): Promise<any[]> {
   return chapters;
 }
 
+async function fetchMangadexMangaById(mangaId: string): Promise<any | null> {
+  const query = new URLSearchParams({
+    limit: "1",
+  });
+  query.append("ids[]", mangaId);
+  query.append("includes[]", "cover_art");
+  query.append("includes[]", "author");
+  query.append("includes[]", "artist");
+
+  const result = await fetchMangadexJson<any>("/manga", query);
+  const items = Array.isArray(result?.data) ? result.data : [];
+  return items.find((item: any) => item?.id === mangaId) || items[0] || null;
+}
+
 async function fetchMangadexWebtoonList(query: any): Promise<any> {
   const page = Math.max(1, parseInt(query.page) || 1);
   const limit = Math.min(MANGADEX_MAX_WEBTOON_LIMIT, Math.max(1, parseInt(query.limit) || MANGADEX_MAX_WEBTOON_LIMIT));
@@ -648,15 +662,8 @@ async function fetchMangadexWebtoonList(query: any): Promise<any> {
 }
 
 async function fetchMangadexWebtoonDetail(mangaId: string): Promise<any> {
-  const detailQuery = new URLSearchParams();
-  detailQuery.append("includes[]", "cover_art");
-  detailQuery.append("includes[]", "author");
-  detailQuery.append("includes[]", "artist");
-
-  const detailResult = await fetchMangadexJson<any>(`/manga/${encodeURIComponent(mangaId)}`, detailQuery);
+  const manga = await fetchMangadexMangaById(mangaId).catch(() => null);
   const feedResult = await fetchMangadexFeed(mangaId).catch(() => []);
-
-  const manga = detailResult?.data;
   if (!manga?.id) return apiError("Webtoon tidak ditemukan", 404);
 
   const attrs = manga.attributes || {};
