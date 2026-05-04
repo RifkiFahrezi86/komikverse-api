@@ -393,6 +393,34 @@ function pickMangadexText(value: Record<string, string> | undefined): string {
   return value.id || value.en || value["ja-ro"] || value.ja || Object.values(value)[0] || "";
 }
 
+function sanitizeMangadexDescription(value: string): string {
+  const normalized = String(value || "").replace(/\r/g, "").trim();
+  if (!normalized) return "";
+
+  const withoutMarkdownLinks = normalized.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1");
+  const lines = withoutMarkdownLinks.split("\n");
+  const cleaned: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (/^(?:---+|\*\*\s*(?:original webtoon|official translations?|original novel|official english translation of the novel)|(?:original webtoon|official translations?|original novel|official english translation of the novel)\b)/i.test(line)) {
+      break;
+    }
+
+    if (!line) {
+      if (cleaned.length > 0 && cleaned[cleaned.length - 1] !== "") {
+        cleaned.push("");
+      }
+      continue;
+    }
+
+    cleaned.push(line);
+  }
+
+  return cleaned.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function normalizeMangadexText(value: string): string {
   return String(value || "")
     .normalize("NFKD")
@@ -619,7 +647,7 @@ function transformMangadexComic(raw: any): any {
     href: `/manga/${raw.id}`,
     type: mapMangadexType(attrs.originalLanguage),
     chapter: attrs.lastChapter ? `Chapter ${attrs.lastChapter}` : undefined,
-    description: pickMangadexText(attrs.description),
+    description: sanitizeMangadexDescription(pickMangadexText(attrs.description)),
     genre: genreNames.join(", "),
     status: mapMangadexStatus(attrs.status),
     author: authors || undefined,
@@ -868,7 +896,7 @@ async function fetchMangadexWebtoonDetail(mangaId: string): Promise<any> {
     title: pickMangadexText(attrs.title),
     thumbnail: getMangadexCoverUrl(manga.id, relationships, "thumb"),
     image: getMangadexCoverUrl(manga.id, relationships, "full") || getMangadexCoverUrl(manga.id, relationships, "thumb"),
-    description: pickMangadexText(attrs.description),
+    description: sanitizeMangadexDescription(pickMangadexText(attrs.description)),
     type: mapMangadexType(attrs.originalLanguage),
     status: mapMangadexStatus(attrs.status),
     author: authors || undefined,
